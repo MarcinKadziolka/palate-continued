@@ -34,36 +34,12 @@ def resolve_name_collision(dst_folder, filename):
     return new_name
 
 
-def sample_indices_normal(n, k):
+def sample_indices_uniform_no_replacement(n, k):
     """
-    Losuje k indeksów z przedziału 0...n-1 wg rozkładu normalnego.
-    Środek ustawiony na n/2, odchylenie: n/6 (bezpiecznie dla 99.7% danych).
+    Losuje k unikalnych indeksów (bez powtórzeń)
+    z rozkładu jednostajnego.
     """
-    mean = n / 2
-    std = n / 6
-
-    indices = np.random.normal(loc=mean, scale=std, size=k)
-    indices = np.clip(indices, 0, n - 1)  # żeby nie wyjść poza zakres
-    return indices.astype(int)
-def sample_indices_normal_no_replacement(n, k):
-    """
-    Losuje k unikalnych indeksów (bez powtórzeń) z wagami wynikającymi
-    z rozkładu normalnego.
-    """
-    x = np.arange(n)
-
-    # Parametry rozkładu normalnego
-    mean = n / 2
-    std = n / 6
-
-    # Gęstość PDF dla każdego indeksu
-    pdf = np.exp(-0.5 * ((x - mean) / std) ** 2)
-    pdf /= pdf.sum()  # normalizacja do sumy = 1
-
-    # Losowanie bez powtórzeń
-    indices = np.random.choice(n, size=k, replace=False, p=pdf)
-    return indices
-
+    return np.random.choice(n, size=k, replace=False)
 
 
 def main(input_root, output_root, sample_size=10000):
@@ -76,8 +52,8 @@ def main(input_root, output_root, sample_size=10000):
     if n < sample_size:
         raise ValueError(f"Za mało obrazów ({n}) aby wylosować {sample_size}.")
 
-    print("🎲 Losuję obrazy wg rozkładu normalnego...")
-    indices = sample_indices_normal_no_replacement(n, sample_size)
+    print("🎲 Losuję obrazy z rozkładu jednostajnego (równomiernego)...")
+    indices = sample_indices_uniform_no_replacement(n, sample_size)
     selected = [all_images[i] for i in indices]
 
     os.makedirs(output_root, exist_ok=True)
@@ -95,10 +71,17 @@ def main(input_root, output_root, sample_size=10000):
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Losowanie 10k obrazów wg rozkładu normalnego.")
+    parser = argparse.ArgumentParser(
+        description="Losowanie 10k obrazów z rozkładu jednostajnego."
+    )
     parser.add_argument("input_root", help="Ścieżka do katalogu z folderami 0–9")
     parser.add_argument("output_root", help="Ścieżka do katalogu na wynik")
-    parser.add_argument("--sample_size", type=int, default=10000, help="Ile obrazów wylosować (domyślnie 10k)")
+    parser.add_argument(
+        "--sample_size",
+        type=int,
+        default=10000,
+        help="Ile obrazów wylosować (domyślnie 10k)"
+    )
 
     args = parser.parse_args()
     main(args.input_root, args.output_root, args.sample_size)
