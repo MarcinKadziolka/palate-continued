@@ -24,7 +24,7 @@ Array = jnp.ndarray
 
 # The bandwidth parameter for the Gaussian RBF kernel. See the paper for more
 # details.
-_SIGMA = 10
+_SIGMA = 0.01 #nowa sigma
 
 
 _BLOCK_SIZE = 10
