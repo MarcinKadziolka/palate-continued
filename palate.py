@@ -1,7 +1,6 @@
 from dmmd import dmmd_blockwise
 
-def compute_palate(train_representations, test_representations, gen_representations):
-
+def compute_palate(train_representations, test_representations, gen_representations) -> tuple[float, float]:
     dmmd_train, _ = dmmd_blockwise(train_representations, gen_representations)
     dmmd_test, denominator_scale = dmmd_blockwise(
         test_representations, gen_representations

@@ -54,14 +54,14 @@ class CustomDataLoader:
 
     def __init__(
         self,
-        path,
-        nsample=-1,
+        path: str,
+        nsample: int = -1,
         transform=None,
-        batch_size=50,
-        num_workers=1,
-        seed=13579,
-        random_sample=True,
-        sample_w_replacement=False,
+        batch_size: int = 50,
+        num_workers: int = 1,
+        seed: int = 13579,
+        random_sample: bool = True,
+        sample_w_replacement: bool = False,
     ):
         self.path = path
         self.nsample = nsample
@@ -196,18 +196,18 @@ class CustomDataLoader:
 
 
 def get_dataloader(
-    path,
-    nsample=-1,
-    batch_size=32,
-    num_workers=1,
+    path: str,
+    nsample: int = -1,
+    batch_size: int = 32,
+    num_workers: int = 1,
     transform=None,
-    seed=13579,
-    random_sample=True,
-    sample_w_replacement=False,
-):
+    seed: int = 13579,
+    random_sample: bool = True,
+    sample_w_replacement: bool = False,
+) -> CustomDataLoader:
     """Deal with format of input path, and get relevant DataLoader"""
 
-    DL = CustomDataLoader(
+    data_loader = CustomDataLoader(
         path,
         nsample=nsample,
         batch_size=batch_size,
@@ -218,4 +218,4 @@ def get_dataloader(
         sample_w_replacement=sample_w_replacement,
     )
 
-    return DL
+    return data_loader

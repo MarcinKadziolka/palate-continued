@@ -27,6 +27,8 @@ import torch
 
 import sys
 
+from torch import Tensor
+
 from .encoder import Encoder
 
 from PIL import Image
@@ -72,7 +74,7 @@ class DINOv2Encoder(Encoder):
         self.model = torch.hub.load("facebookresearch/dinov2", arch_str)
         self.clean_resize = clean_resize
 
-    def transform(self, img):
+    def transform(self, img) -> Tensor:
 
         imagenet_mean = np.array([0.485, 0.456, 0.406])
         imagenet_std = np.array([0.229, 0.224, 0.225])

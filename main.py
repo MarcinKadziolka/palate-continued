@@ -5,13 +5,14 @@ import csv
 import uuid
 import logging
 import pathlib
-from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser
+from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
+from typing import Literal, Optional, Callable
 
 import numpy as np
 import torch
-
-from dataloader import get_dataloader
-from models.load_encoder import MODELS, load_encoder
+from models.encoder import Encoder
+from dataloader import get_dataloader, CustomDataLoader
+from models.load_encoder import MODELS, load_encoder, DinoEncoder
 from palate import compute_palate
 from representations import get_representations
 
@@ -25,8 +26,6 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler()],
 )
-
-logger.info("Starting main.py")
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
 parser.add_argument(
@@ -115,7 +114,7 @@ parser.add_argument(
 )
 
 
-def get_device_and_num_workers(device, num_workers):
+def get_device_and_num_workers(device: Literal["cuda", "cpu"], num_workers: int) -> tuple[torch.device, int]:
     if device is None:
         device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
     else:
@@ -137,8 +136,8 @@ def get_device_and_num_workers(device, num_workers):
 
 
 def get_dataloader_from_path(
-    path, model_transform, num_workers, args, sample_w_replacement=False
-):
+    path: str, model_transform: Callable, num_workers: int, args: Namespace, sample_w_replacement: bool = False
+) -> CustomDataLoader:
     logger.info(f"Initializing dataloader for path: {path}")
     dataloader = get_dataloader(
         path,
@@ -152,7 +151,7 @@ def get_dataloader_from_path(
     return dataloader
 
 
-def create_unique_output_name():
+def create_unique_output_name() -> str:
     if os.getenv("OAR_JOB_ID"):
         unique_str = os.getenv("OAR_JOB_ID")
     else:
@@ -188,13 +187,13 @@ def write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample):
         writer.writerow(row)
 
 
-def get_last_x_dirs(path, x=2):
+def get_last_x_dirs(path: str, x=2):
     parts = pathlib.Path(path).parts
     x = min(x, len(parts))
     return "_".join(parts[-x:])
 
 
-def save_score(scores, output_dir, model, train_path, test_path, gen_path, nsample):
+def save_score(scores: dict[str, float], output_dir: str, model, train_path, test_path, gen_path, nsample):
 
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
@@ -207,7 +206,7 @@ def save_score(scores, output_dir, model, train_path, test_path, gen_path, nsamp
     logger.info(f"Saved scores to {output_dir}")
 
 
-def get_model(args, device):
+def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
     return load_encoder(
         args.model,
         device,
@@ -219,7 +218,7 @@ def get_model(args, device):
     )
 
 
-def compute_representations(path, model, num_workers, device, args):
+def compute_representations(path: str, model: DinoEncoder, num_workers: int, device, args: Namespace):
     """
     Compute or load representations for the given path.
 
@@ -240,7 +239,7 @@ def compute_representations(path, model, num_workers, device, args):
             return loaded_reps
 
     logger.info("Load path doesn't exist")
-    dataloader = get_dataloader_from_path(path, model.transform, num_workers, args)
+    dataloader: CustomDataLoader = get_dataloader_from_path(path, model.transform, num_workers, args)
 
     logger.info(f"Computing representations for path: {path}")
     representations = get_representations(model, dataloader, device, normalized=False)
@@ -253,7 +252,7 @@ def compute_representations(path, model, num_workers, device, args):
     return representations
 
 
-def save_outputs(output_dir, path, reps, model, dataloader, nsample):
+def save_outputs(output_dir: str, path: str, reps, model: DinoEncoder, dataloader: CustomDataLoader, nsample: int):
     """Save representations and other info to disk at file_path"""
     # Create a unique file path for saving
     out_path = get_path(output_dir, path, model, nsample)
@@ -271,7 +270,7 @@ def save_outputs(output_dir, path, reps, model, dataloader, nsample):
     np.savez(out_path, model=model, reps=reps, hparams=hyperparams)
 
 
-def load_reps_from_path(saved_dir, path, model, nsample):
+def load_reps_from_path(saved_dir: str, path: str, model: DinoEncoder, nsample: int) -> Optional[np.ndarray]:
     """
     Load representations from a saved .npz file if it exists.
 
@@ -288,7 +287,7 @@ def load_reps_from_path(saved_dir, path, model, nsample):
     load_path = get_path(saved_dir, path, model, nsample)
     logger.info(f"Checking if load path exists: {load_path}")
 
-    if os.path.exists(f"{load_path}"):
+    if os.path.exists(load_path):
         saved_file = np.load(f"{load_path}")
         reps = saved_file["reps"]
         print(f"Loaded representations from {load_path}")
@@ -297,7 +296,7 @@ def load_reps_from_path(saved_dir, path, model, nsample):
         return None
 
 
-def get_path(output_dir, path, model, nsample):
+def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
     # Example: Create a unique name based on model, checkpoint, and dataloader
     model_name = model.__class__.__name__
@@ -307,7 +306,7 @@ def get_path(output_dir, path, model, nsample):
     return os.path.join(output_dir, f"{model_name}_{dataset_name}_{str(nsample)}.npz")
 
 
-def write_arguments(args, output_dir, filename="arguments.txt"):
+def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
     """
     Writes all arguments from the `args` object to a file, one argument per line.
 
@@ -327,7 +326,9 @@ def write_arguments(args, output_dir, filename="arguments.txt"):
 
 
 def main():
-    args = parser.parse_args()
+    logger.info("Starting main function.")
+    args: Namespace = parser.parse_args()
+    logger.info(f"Arguments: {args}")
     device, num_workers = get_device_and_num_workers(args.device, args.num_workers)
     if len(args.path) < 3:
         logger.error(
@@ -338,10 +339,14 @@ def main():
     train_path = args.path[0]
     test_path = args.path[1]
     gen_paths = args.path[2:]
+    logger.info(f"Training path: {train_path}")
+    logger.info(f"Testing path: {test_path}")
+    logger.info(f"Gen paths: {gen_paths}")
 
     logger.info(f"Loading model: {args.model}")
-    model = get_model(args, device)
+    model: DinoEncoder = get_model(args, device)
     logger.info(f"Loaded model: {args.model}")
+
     train_representations = compute_representations(
         train_path, model, num_workers, device, args
     )
