@@ -1,6 +1,8 @@
+import numpy as np
+
 from dmmd import dmmd_blockwise
 
-def compute_palate(train_representations, test_representations, gen_representations) -> tuple[float, float]:
+def compute_palate(train_representations: np.ndarray, test_representations: np.ndarray, gen_representations: np.ndarray) -> tuple[float, float]:
     dmmd_train, _ = dmmd_blockwise(train_representations, gen_representations)
     dmmd_test, denominator_scale = dmmd_blockwise(
         test_representations, gen_representations

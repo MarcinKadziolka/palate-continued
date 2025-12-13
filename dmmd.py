@@ -19,6 +19,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 Array = jnp.ndarray
 
@@ -66,7 +67,7 @@ def blockwise_kernel_mean(x, y) -> float:
 
 
 @jax.jit
-def dmmd_blockwise(x, y) -> tuple[float, float]:
+def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     """Computes D-MMD using blockwise kernel computation."""
     mean_kxx = blockwise_kernel_mean(x, x)
     mean_kxy = blockwise_kernel_mean(x, y)

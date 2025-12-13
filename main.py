@@ -160,7 +160,7 @@ def create_unique_output_name() -> str:
     return str(unique_str)[:8]
 
 
-def write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample):
+def write_to_txt(scores: dict[str, float], output_dir: str, model: DinoEncoder, train_path: str, test_path: str, gen_path: str, nsample: int):
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
