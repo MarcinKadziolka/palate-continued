@@ -218,7 +218,7 @@ def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
     )
 
 
-def compute_representations(path: str, model: DinoEncoder, num_workers: int, device, args: Namespace):
+def compute_representations(path: str, model: DinoEncoder, num_workers: int, device, args: Namespace) -> np.ndarray:
     """
     Compute or load representations for the given path.
 
