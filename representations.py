@@ -6,7 +6,8 @@ import torch
 from torch.nn.functional import adaptive_avg_pool2d
 from models.load_encoder import DinoEncoder
 from dataloader import CustomDataLoader
-
+import logging
+logger = logging.getLogger(__name__)
 
 def get_representations(model: DinoEncoder, DataLoader: CustomDataLoader, device: torch.device, normalized: bool = False) -> np.ndarray:
     """Extracts features from all images in DataLoader given model.
@@ -20,6 +21,7 @@ def get_representations(model: DinoEncoder, DataLoader: CustomDataLoader, device
        activations of the given tensor when feeding inception with the
        query tensor.
     """
+    logger.info(f"Computing representations for {DataLoader.path} using {model.__class__.__name__}.")
     model.eval()
 
     start_idx = 0

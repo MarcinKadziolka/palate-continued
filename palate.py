@@ -4,9 +4,9 @@ from dataclasses import dataclass
 import numpy as np
 import sympy as sp
 from jaxlib.xla_extension import ArrayImpl
-
+import logging
 from dmmd import dmmd_blockwise
-
+logger = logging.getLogger(__name__)
 dmmd_test, dmmd_train, denominator_scale = sp.symbols(
     "dmmd_test dmmd_train denominator_scale"
 )
@@ -88,7 +88,7 @@ def _compute_palate(
 ) -> PalateComponents:
     palate_val = PALATE_FN(dmmd_test_val, dmmd_train_val)
     m_palate_val = M_PALATE_FN(dmmd_test_val, denominator_scale_val, palate_val)
-
+    logger.info(f"Palate computed: {m_palate_val=}, {palate_val=}.")
     return PalateComponents(
         denominator_scale=denominator_scale_val,
         dmmd_test=dmmd_test_val,
