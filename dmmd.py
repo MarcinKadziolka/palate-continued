@@ -73,4 +73,4 @@ def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     mean_kxy = blockwise_kernel_mean(x, y)
     mean_kyy = blockwise_kernel_mean(y, y)
 
-    return (mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy)
+    return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy

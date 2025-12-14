@@ -1,23 +1,24 @@
 # This script contains modified parts of code from repository: https://github.com/layer6ai-labs/dgm-eval
 
-import os
 import csv
-import uuid
+import dataclasses
 import logging
+import os
 import pathlib
+import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 
 import numpy as np
 import torch
-from models.encoder import Encoder
-from dataloader import get_dataloader, CustomDataLoader
-from models.load_encoder import MODELS, load_encoder, DinoEncoder
-from palate import compute_palate
+from jaxlib.xla_extension import ArrayImpl
+
+from dataloader import CustomDataLoader
+from dataloader import get_dataloader
+from models.load_encoder import DinoEncoder
+from models.load_encoder import MODELS, load_encoder
+from palate import compute_palate, PalateComponents
 from representations import get_representations
-
-import multiprocessing #dodane ze wzgl na windows
-
 
 logger = logging.getLogger(__name__)
 
@@ -114,14 +115,16 @@ parser.add_argument(
 )
 
 
-def get_device_and_num_workers(device: Literal["cuda", "cpu"], num_workers: int) -> tuple[torch.device, int]:
+def get_device_and_num_workers(
+    device: Literal["cuda", "cpu"], num_workers: int
+) -> tuple[torch.device, int]:
     if device is None:
         device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
     else:
         device = torch.device(device)
 
     if num_workers is None:
-        #num_avail_cpus = len(os.sched_getaffinity(0)) zmiana przez windows
+        # num_avail_cpus = len(os.sched_getaffinity(0)) zmiana przez windows
         try:
             num_avail_cpus = len(os.sched_getaffinity(0))
         except AttributeError:
@@ -136,7 +139,11 @@ def get_device_and_num_workers(device: Literal["cuda", "cpu"], num_workers: int)
 
 
 def get_dataloader_from_path(
-    path: str, model_transform: Callable, num_workers: int, args: Namespace, sample_w_replacement: bool = False
+    path: str,
+    model_transform: Callable,
+    num_workers: int,
+    args: Namespace,
+    sample_w_replacement: bool = False,
 ) -> CustomDataLoader:
     logger.info(f"Initializing dataloader for path: {path}")
     dataloader = get_dataloader(
@@ -160,7 +167,15 @@ def create_unique_output_name() -> str:
     return str(unique_str)[:8]
 
 
-def write_to_txt(scores: dict[str, float], output_dir: str, model: DinoEncoder, train_path: str, test_path: str, gen_path: str, nsample: int):
+def write_to_txt(
+    scores: dict[str, ArrayImpl | str],
+    output_dir: str,
+    model: DinoEncoder,
+    train_path: str,
+    test_path: str,
+    gen_path: str,
+    nsample: int,
+):
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
@@ -174,7 +189,14 @@ def write_to_txt(scores: dict[str, float], output_dir: str, model: DinoEncoder, 
         f.write("\n" + "=" * 50 + "\n\n")
 
 
-def write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample):
+def write_to_csv(
+    scores: dict[str, ArrayImpl | str],
+    output_dir,
+    train_name,
+    test_name,
+    gen_name,
+    nsample,
+):
     csv_file = os.path.join(output_dir, "metrics_summary.csv")
     file_exists = os.path.isfile(csv_file)
 
@@ -193,13 +215,27 @@ def get_last_x_dirs(path: str, x=2):
     return "_".join(parts[-x:])
 
 
-def save_score(scores: dict[str, float], output_dir: str, model, train_path, test_path, gen_path, nsample):
+def save_score(
+    palate_components: PalateComponents,
+    output_dir: str,
+    model,
+    train_path,
+    test_path,
+    gen_path,
+    nsample,
+):
 
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
     gen_name = get_last_x_dirs(gen_path)
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    palate_fields = dataclasses.fields(palate_components)
+    scores = {}
+    for field in palate_fields:
+        scores[field.name] = getattr(palate_components, field.name)
+
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
     write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
 
@@ -218,7 +254,9 @@ def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
     )
 
 
-def compute_representations(path: str, model: DinoEncoder, num_workers: int, device, args: Namespace) -> np.ndarray:
+def compute_representations(
+    path: str, model: DinoEncoder, num_workers: int, device, args: Namespace
+) -> np.ndarray:
     """
     Compute or load representations for the given path.
 
@@ -239,7 +277,9 @@ def compute_representations(path: str, model: DinoEncoder, num_workers: int, dev
             return loaded_reps
 
     logger.info("Load path doesn't exist")
-    dataloader: CustomDataLoader = get_dataloader_from_path(path, model.transform, num_workers, args)
+    dataloader: CustomDataLoader = get_dataloader_from_path(
+        path, model.transform, num_workers, args
+    )
 
     logger.info(f"Computing representations for path: {path}")
     representations = get_representations(model, dataloader, device, normalized=False)
@@ -252,7 +292,14 @@ def compute_representations(path: str, model: DinoEncoder, num_workers: int, dev
     return representations
 
 
-def save_outputs(output_dir: str, path: str, reps, model: DinoEncoder, dataloader: CustomDataLoader, nsample: int):
+def save_outputs(
+    output_dir: str,
+    path: str,
+    reps,
+    model: DinoEncoder,
+    dataloader: CustomDataLoader,
+    nsample: int,
+):
     """Save representations and other info to disk at file_path"""
     # Create a unique file path for saving
     out_path = get_path(output_dir, path, model, nsample)
@@ -270,7 +317,9 @@ def save_outputs(output_dir: str, path: str, reps, model: DinoEncoder, dataloade
     np.savez(out_path, model=model, reps=reps, hparams=hyperparams)
 
 
-def load_reps_from_path(saved_dir: str, path: str, model: DinoEncoder, nsample: int) -> Optional[np.ndarray]:
+def load_reps_from_path(
+    saved_dir: str, path: str, model: DinoEncoder, nsample: int
+) -> Optional[np.ndarray]:
     """
     Load representations from a saved .npz file if it exists.
 
@@ -367,17 +416,14 @@ def main():
             gen_path, model, num_workers, device, args
         )
 
-        m_palate, palate = compute_palate(
+        palate_components: PalateComponents = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
             gen_representations=gen_representations,
         )
 
-        scores["m_palate"] = m_palate
-        scores["palate"] = palate
-
         save_score(
-            scores,
+            palate_components,
             output_dir,
             model,
             train_path,
