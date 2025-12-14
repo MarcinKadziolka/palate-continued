@@ -5,6 +5,7 @@ import numpy as np
 import sympy as sp
 from jaxlib.xla_client import Array
 import logging
+import time
 from dmmd import dmmd_blockwise
 logger = logging.getLogger(__name__)
 dmmd_test, dmmd_train, denominator_scale = sp.symbols(
@@ -19,7 +20,7 @@ M_PALATE_EXPR: sp.Expr = (
 
 
 # Convert the sympy expressions to functions runnable using jax
-MODULE_FOR_SYMPY = "jax"
+MODULE_FOR_SYMPY = "numpy"
 PALATE_FN = sp.lambdify(
     (dmmd_test, dmmd_train),
     PALATE_EXPR,
@@ -76,10 +77,13 @@ def compute_palate(
     gen_representations: np.ndarray,
     sigma: float,
 ) -> PalateComponents:
+    dmmd_start = time.time()
+    logger.info("Starting calculating dmmd values...")
     dmmd_train_val, _ = dmmd_blockwise(train_representations, gen_representations, sigma)
     dmmd_test_val, denominator_scale_val = dmmd_blockwise(
         test_representations, gen_representations, sigma
     )
+    logger.info(f"dmmd values calculated in {time.time() - dmmd_start}s.")
 
     return _compute_palate(dmmd_train_val, dmmd_test_val, denominator_scale_val, sigma)
 
@@ -90,9 +94,11 @@ def _compute_palate(
     denominator_scale_val: Array,
     sigma: float,
 ) -> PalateComponents:
+    logger.info("Starting calculating palate values...")
+    palate_start = time.time()
     palate_val = PALATE_FN(dmmd_test_val, dmmd_train_val)
     m_palate_val = M_PALATE_FN(dmmd_test_val, denominator_scale_val, palate_val)
-    logger.info(f"Palate computed: {m_palate_val=}, {palate_val=}.")
+    logger.info(f"Palate computed in {time.time() - palate_start}s: {m_palate_val=}, {palate_val=}.")
     return PalateComponents(
         denominator_scale=denominator_scale_val,
         dmmd_test=dmmd_test_val,
