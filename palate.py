@@ -1,13 +1,103 @@
+from dataclasses import dataclass
+import hashlib
+
 import numpy as np
+import sympy as sp
+from jaxlib.xla_extension import ArrayImpl
 
 from dmmd import dmmd_blockwise
 
-def compute_palate(train_representations: np.ndarray, test_representations: np.ndarray, gen_representations: np.ndarray) -> tuple[float, float]:
-    dmmd_train, _ = dmmd_blockwise(train_representations, gen_representations)
-    dmmd_test, denominator_scale = dmmd_blockwise(
+
+dmmd_test, dmmd_train, denominator_scale = sp.symbols(
+    "dmmd_test dmmd_train denominator_scale"
+)
+palate = sp.symbols("palate")
+
+PALATE_EXPR: sp.Expr = dmmd_test / (dmmd_test + dmmd_train)
+M_PALATE_EXPR: sp.Expr = (
+    dmmd_test / (2 * denominator_scale) + sp.Rational(1, 2) * palate
+)
+
+
+# Convert the sympy expressions to functions runnable using jax
+MODULE_FOR_SYMPY = "jax"
+PALATE_FN = sp.lambdify(
+    (dmmd_test, dmmd_train),
+    PALATE_EXPR,
+    modules=MODULE_FOR_SYMPY,
+)
+
+M_PALATE_FN = sp.lambdify(
+    (dmmd_test, denominator_scale, palate),
+    M_PALATE_EXPR,
+    modules=MODULE_FOR_SYMPY,
+)
+
+# Get plain-text representation of the functions
+PALATE_FORMULA = str(PALATE_EXPR)
+M_PALATE_FORMULA = str(M_PALATE_EXPR)
+
+
+def _formula_hash(expr: sp.Expr) -> str:
+    """
+    Structural hash of the symbolic expression.
+    Robust to formatting but sensitive to math changes.
+    Detects meaningful change to the math formula.
+    """
+    return hashlib.sha256(sp.srepr(expr).encode()).hexdigest()[:12]
+
+
+PALATE_FORMULA_HASH = _formula_hash(PALATE_EXPR)
+M_PALATE_FORMULA_HASH = _formula_hash(M_PALATE_EXPR)
+
+
+@dataclass(frozen=True)
+class PalateComponents:
+    # computed
+    m_palate: ArrayImpl
+    palate: ArrayImpl
+
+    # raw
+    dmmd_train: ArrayImpl
+    dmmd_test: ArrayImpl
+    denominator_scale: ArrayImpl
+
+    # formulas
+    palate_formula: str
+    m_palate_formula: str
+    palate_formula_hash: str
+    m_palate_formula_hash: str
+
+
+def compute_palate(
+    train_representations: np.ndarray,
+    test_representations: np.ndarray,
+    gen_representations: np.ndarray,
+) -> PalateComponents:
+    dmmd_train_val, _ = dmmd_blockwise(train_representations, gen_representations)
+    dmmd_test_val, denominator_scale_val = dmmd_blockwise(
         test_representations, gen_representations
     )
 
-    palate = dmmd_test / (dmmd_test + dmmd_train)
-    m_palate = dmmd_test / (2 * denominator_scale) + (1 / 2) * palate
-    return m_palate, palate
+    return _compute_palate(dmmd_train_val, dmmd_test_val, denominator_scale_val)
+
+
+def _compute_palate(
+    dmmd_test_val: ArrayImpl,
+    dmmd_train_val: ArrayImpl,
+    denominator_scale_val: ArrayImpl,
+) -> PalateComponents:
+    palate_val = PALATE_FN(dmmd_test_val, dmmd_train_val)
+    m_palate_val = M_PALATE_FN(dmmd_test_val, denominator_scale_val, palate_val)
+
+    return PalateComponents(
+        denominator_scale=denominator_scale_val,
+        dmmd_test=dmmd_test_val,
+        dmmd_train=dmmd_train_val,
+        palate=palate_val,
+        m_palate=m_palate_val,
+        palate_formula=PALATE_FORMULA,
+        m_palate_formula=M_PALATE_FORMULA,
+        palate_formula_hash=PALATE_FORMULA_HASH,
+        m_palate_formula_hash=M_PALATE_FORMULA_HASH,
+    )
