@@ -5,12 +5,13 @@ import sys
 import pathlib
 import numpy as np
 from torch.utils.data import Dataset, DataLoader, Subset
-
+import logging
 import torchvision
 import torchvision.transforms
 
 from PIL import Image
 
+logger = logging.getLogger(__name__)
 
 IMAGE_EXTENSIONS = {"bmp", "jpg", "jpeg", "pgm", "png", "ppm", "tif", "tiff", "webp"}
 
@@ -63,6 +64,7 @@ class CustomDataLoader:
         random_sample: bool = True,
         sample_w_replacement: bool = False,
     ):
+        logger.info(f"Initializing dataloader for path: {path}")
         self.path = path
         self.nsample = nsample
         self.batch_size = batch_size
@@ -131,6 +133,7 @@ class CustomDataLoader:
             class_dirs = sorted(
                 image_path.glob("[0-9]"), key=get_order
             )  # look for all subfolders in the numerical order
+            logger.info(f"Found {len(class_dirs)} classes in {image_path}")
             self.files = []
             for f in class_dirs:
                 files_in_path = get_files_at_path(f)
@@ -206,7 +209,6 @@ def get_dataloader(
     sample_w_replacement: bool = False,
 ) -> CustomDataLoader:
     """Deal with format of input path, and get relevant DataLoader"""
-
     data_loader = CustomDataLoader(
         path,
         nsample=nsample,

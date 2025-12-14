@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
+    format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s",
     handlers=[logging.StreamHandler()],
 )
 
@@ -71,7 +71,7 @@ parser.add_argument(
 parser.add_argument(
     "--output_dir",
     type=str,
-    default="output/",
+    default="./output",
     help="Directory for saving outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt",
 )
 
@@ -138,7 +138,6 @@ def get_dataloader_from_path(
     args: Namespace,
     sample_w_replacement: bool = False,
 ) -> CustomDataLoader:
-    logger.info(f"Initializing dataloader for path: {path}")
     dataloader = get_dataloader(
         path,
         args.nsample,
@@ -232,7 +231,7 @@ def save_score(
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
     write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
 
-    logger.info(f"Saved scores to {output_dir}")
+    logger.info(f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}")
 
 
 def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
@@ -332,7 +331,7 @@ def load_reps_from_path(
     if os.path.exists(load_path):
         saved_file = np.load(f"{load_path}")
         reps = saved_file["reps"]
-        print(f"Loaded representations from {load_path}")
+        logger.info(f"Loaded representations from {load_path}")
         return reps
     else:
         return None
@@ -385,9 +384,7 @@ def main():
     logger.info(f"Testing path: {test_path}")
     logger.info(f"Gen paths: {gen_paths}")
 
-    logger.info(f"Loading model: {args.model}")
     model: DinoEncoder = get_model(args, device)
-    logger.info(f"Loaded model: {args.model}")
 
     train_representations = compute_representations(
         train_path, model, num_workers, device, args
@@ -398,7 +395,6 @@ def main():
         test_path, model, num_workers, device, args
     )
     logger.info("Finished loading/computing test representations")
-    scores = {}
     unique_name = create_unique_output_name()
     output_dir = os.path.join(args.output_dir, unique_name)
     write_arguments(args, output_dir)

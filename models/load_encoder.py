@@ -4,7 +4,9 @@ import torch
 
 from .dinov2 import DINOv2Encoder
 from .dinov3 import DINOv3Encoder
-from .encoder import Encoder
+import logging
+
+logger = logging.getLogger(__name__)
 
 type DinoEncoder = Union[DINOv2Encoder, DINOv3Encoder]
 
@@ -18,7 +20,6 @@ def load_encoder(model_name: str, device: torch.device, **kwargs) -> DinoEncoder
     """Load feature extractor"""
 
     model_cls: type[DinoEncoder] = MODELS[model_name]
-
     # Get names of model_cls.setup arguments
     signature = inspect.signature(model_cls.setup)
     arguments = list(signature.parameters.keys())
@@ -28,4 +29,5 @@ def load_encoder(model_name: str, device: torch.device, **kwargs) -> DinoEncoder
     encoder: DinoEncoder = model_cls(**{arg: kwargs[arg] for arg in arguments if arg in kwargs})
     encoder.name = model_name
 
+    logger.info(f"Loaded {model_cls.__name__}")
     return encoder.to(device)
