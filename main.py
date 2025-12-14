@@ -9,9 +9,9 @@ import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 
+from jaxlib.xla_client import Array
 import numpy as np
 import torch
-from jaxlib.xla_extension import ArrayImpl
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -161,7 +161,7 @@ def create_unique_output_name() -> str:
 
 
 def write_to_txt(
-    scores: dict[str, ArrayImpl | str],
+    scores: dict[str, Array | str],
     output_dir: str,
     model: DinoEncoder,
     train_path: str,
@@ -183,7 +183,7 @@ def write_to_txt(
 
 
 def write_to_csv(
-    scores: dict[str, ArrayImpl | str],
+    scores: dict[str, Array | str],
     output_dir,
     train_name,
     test_name,

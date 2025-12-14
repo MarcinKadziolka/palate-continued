@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import sympy as sp
-from jaxlib.xla_extension import ArrayImpl
+from jaxlib.xla_client import Array
 import logging
 from dmmd import dmmd_blockwise
 logger = logging.getLogger(__name__)
@@ -53,13 +53,13 @@ M_PALATE_FORMULA_HASH = _formula_hash(M_PALATE_EXPR)
 @dataclass(frozen=True)
 class PalateComponents:
     # computed
-    m_palate: ArrayImpl
-    palate: ArrayImpl
+    m_palate: Array
+    palate: Array
 
     # raw
-    dmmd_train: ArrayImpl
-    dmmd_test: ArrayImpl
-    denominator_scale: ArrayImpl
+    dmmd_train: Array
+    dmmd_test: Array
+    denominator_scale: Array
 
     # formulas
     palate_formula: str
@@ -82,9 +82,9 @@ def compute_palate(
 
 
 def _compute_palate(
-    dmmd_test_val: ArrayImpl,
-    dmmd_train_val: ArrayImpl,
-    denominator_scale_val: ArrayImpl,
+    dmmd_test_val: Array,
+    dmmd_train_val: Array,
+    denominator_scale_val: Array,
 ) -> PalateComponents:
     palate_val = PALATE_FN(dmmd_test_val, dmmd_train_val)
     m_palate_val = M_PALATE_FN(dmmd_test_val, denominator_scale_val, palate_val)

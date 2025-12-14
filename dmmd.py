@@ -20,7 +20,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
-
+from jaxlib import xla_client
 Array = jnp.ndarray
 
 # The bandwidth parameter for the Gaussian RBF kernel. See the paper for more
@@ -67,7 +67,7 @@ def blockwise_kernel_mean(x, y) -> float:
 
 
 @jax.jit
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
+def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[xla_client.Array, xla_client.Array]:
     """Computes D-MMD using blockwise kernel computation."""
     mean_kxx = blockwise_kernel_mean(x, x)
     mean_kxy = blockwise_kernel_mean(x, y)

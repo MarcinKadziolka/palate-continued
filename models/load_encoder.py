@@ -5,10 +5,11 @@ import torch
 from .dinov2 import DINOv2Encoder
 from .dinov3 import DINOv3Encoder
 import logging
+from typing import TypeAlias
 
 logger = logging.getLogger(__name__)
 
-type DinoEncoder = Union[DINOv2Encoder, DINOv3Encoder]
+DinoEncoder: TypeAlias = Union[DINOv2Encoder, DINOv3Encoder]
 
 MODELS: dict[str, type[DinoEncoder]] = {
     "dinov2": DINOv2Encoder,
