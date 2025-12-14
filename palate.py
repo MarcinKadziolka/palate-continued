@@ -1,12 +1,11 @@
-from dataclasses import dataclass
 import hashlib
+from dataclasses import dataclass
 
 import numpy as np
 import sympy as sp
 from jaxlib.xla_extension import ArrayImpl
 
 from dmmd import dmmd_blockwise
-
 
 dmmd_test, dmmd_train, denominator_scale = sp.symbols(
     "dmmd_test dmmd_train denominator_scale"

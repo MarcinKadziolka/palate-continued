@@ -1,29 +1,24 @@
 # This script contains modified parts of code from repository: https://github.com/layer6ai-labs/dgm-eval
 
-import os
 import csv
-import uuid
+import dataclasses
 import logging
+import os
 import pathlib
+import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 
 import numpy as np
 import torch
 from jaxlib.xla_extension import ArrayImpl
-from models.encoder import Encoder
-from dataloader import get_dataloader, CustomDataLoader
-from models.load_encoder import MODELS, load_encoder, DinoEncoder
-from palate import compute_palate
-from jaxlib.xla_extension import ArrayImpl
 
+from dataloader import CustomDataLoader
 from dataloader import get_dataloader
+from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
 from palate import compute_palate, PalateComponents
 from representations import get_representations
-import dataclasses
-import multiprocessing  # dodane ze wzgl na windows
-
 
 logger = logging.getLogger(__name__)
 
