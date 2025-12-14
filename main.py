@@ -85,13 +85,6 @@ parser.add_argument(
     help="Load representations and statistics from previous runs if possible",
 )
 
-parser.add_argument(
-    "--no-load",
-    action="store_false",
-    dest="load",
-    help="Do not load representations and statistics from previous runs.",
-)
-parser.set_defaults(load=True)
 
 parser.add_argument("--seed", type=int, default=13579, help="Random seed")
 
