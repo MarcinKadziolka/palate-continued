@@ -120,7 +120,9 @@ parser.add_argument(
 )
 
 
-def get_device_and_num_workers(device: Literal["cuda", "cpu"], num_workers: int) -> tuple[torch.device, int]:
+def get_device_and_num_workers(
+    device: Literal["cuda", "cpu"], num_workers: int
+) -> tuple[torch.device, int]:
     if device is None:
         device = torch.device("cuda" if (torch.cuda.is_available()) else "cpu")
     else:
@@ -142,7 +144,11 @@ def get_device_and_num_workers(device: Literal["cuda", "cpu"], num_workers: int)
 
 
 def get_dataloader_from_path(
-    path: str, model_transform: Callable, num_workers: int, args: Namespace, sample_w_replacement: bool = False
+    path: str,
+    model_transform: Callable,
+    num_workers: int,
+    args: Namespace,
+    sample_w_replacement: bool = False,
 ) -> CustomDataLoader:
     logger.info(f"Initializing dataloader for path: {path}")
     dataloader = get_dataloader(
@@ -166,7 +172,15 @@ def create_unique_output_name() -> str:
     return str(unique_str)[:8]
 
 
-def write_to_txt(scores: dict[str, ArrayImpl | str], output_dir: str, model: DinoEncoder, train_path: str, test_path: str, gen_path: str, nsample: int):
+def write_to_txt(
+    scores: dict[str, ArrayImpl | str],
+    output_dir: str,
+    model: DinoEncoder,
+    train_path: str,
+    test_path: str,
+    gen_path: str,
+    nsample: int,
+):
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
@@ -206,7 +220,15 @@ def get_last_x_dirs(path: str, x=2):
     return "_".join(parts[-x:])
 
 
-def save_score(palate_components: PalateComponents, output_dir: str, model, train_path, test_path, gen_path, nsample):
+def save_score(
+    palate_components: PalateComponents,
+    output_dir: str,
+    model,
+    train_path,
+    test_path,
+    gen_path,
+    nsample,
+):
 
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
@@ -237,7 +259,9 @@ def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
     )
 
 
-def compute_representations(path: str, model: DinoEncoder, num_workers: int, device, args: Namespace) -> np.ndarray:
+def compute_representations(
+    path: str, model: DinoEncoder, num_workers: int, device, args: Namespace
+) -> np.ndarray:
     """
     Compute or load representations for the given path.
 
@@ -258,7 +282,9 @@ def compute_representations(path: str, model: DinoEncoder, num_workers: int, dev
             return loaded_reps
 
     logger.info("Load path doesn't exist")
-    dataloader: CustomDataLoader = get_dataloader_from_path(path, model.transform, num_workers, args)
+    dataloader: CustomDataLoader = get_dataloader_from_path(
+        path, model.transform, num_workers, args
+    )
 
     logger.info(f"Computing representations for path: {path}")
     representations = get_representations(model, dataloader, device, normalized=False)
@@ -271,7 +297,14 @@ def compute_representations(path: str, model: DinoEncoder, num_workers: int, dev
     return representations
 
 
-def save_outputs(output_dir: str, path: str, reps, model: DinoEncoder, dataloader: CustomDataLoader, nsample: int):
+def save_outputs(
+    output_dir: str,
+    path: str,
+    reps,
+    model: DinoEncoder,
+    dataloader: CustomDataLoader,
+    nsample: int,
+):
     """Save representations and other info to disk at file_path"""
     # Create a unique file path for saving
     out_path = get_path(output_dir, path, model, nsample)
@@ -289,7 +322,9 @@ def save_outputs(output_dir: str, path: str, reps, model: DinoEncoder, dataloade
     np.savez(out_path, model=model, reps=reps, hparams=hyperparams)
 
 
-def load_reps_from_path(saved_dir: str, path: str, model: DinoEncoder, nsample: int) -> Optional[np.ndarray]:
+def load_reps_from_path(
+    saved_dir: str, path: str, model: DinoEncoder, nsample: int
+) -> Optional[np.ndarray]:
     """
     Load representations from a saved .npz file if it exists.
 
