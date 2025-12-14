@@ -29,6 +29,7 @@ logging.basicConfig(
 )
 
 parser = ArgumentParser(formatter_class=ArgumentDefaultsHelpFormatter)
+
 parser.add_argument(
     "--model",
     type=str,
@@ -38,7 +39,11 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "-bs", "--batch_size", type=int, default=50, help="Batch size to use"
+    "-bs",
+    "--batch_size",
+    type=int,
+    default=50,
+    help="Batch size to use. If needed, equals to min(batch_size, nsample).",
 )
 
 parser.add_argument(
@@ -52,21 +57,19 @@ parser.add_argument(
     "--device", type=str, default=None, help="Device to use. Like cuda, cuda:0 or cpu"
 )
 
-
 parser.add_argument(
     "--nsample",
     type=int,
     default=10000,
-    help="Maximum number of images to use for calculation",
+    help="Maximum number of images to use for calculation.",
 )
 
 parser.add_argument(
     "path",
     type=str,
     nargs="+",
-    help="Paths to the images. The order is train, test, gen_1, gen_2, ..., gen_n ",
+    help="Paths to the images. The order is train, test, gen_1, gen_2, ..., gen_n.",
 )
-
 
 parser.add_argument(
     "--output_dir",
@@ -74,17 +77,6 @@ parser.add_argument(
     default="./output",
     help="Directory for saving outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt",
 )
-
-parser.add_argument(
-    "--save", action="store_true", help="Save representations to repr dir"
-)
-
-parser.add_argument(
-    "--load",
-    action="store_true",
-    help="Load representations and statistics from previous runs if possible",
-)
-
 
 parser.add_argument("--seed", type=int, default=13579, help="Random seed")
 
@@ -99,12 +91,21 @@ parser.add_argument(
     help="Negative depth for internal layers, positive 1 for after projection head.",
 )
 
-
 parser.add_argument(
     "--repr_dir",
     type=str,
     default="./saved_representations",
     help="Dir to store saved representations.",
+)
+
+parser.add_argument(
+    "--save", action="store_true", help="Save representations to repr_dir."
+)
+
+parser.add_argument(
+    "--load",
+    action="store_true",
+    help="Load representations from repr_dir instead of calculating them again",
 )
 
 
@@ -231,7 +232,9 @@ def save_score(
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
     write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
 
-    logger.info(f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}")
+    logger.info(
+        f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}"
+    )
 
 
 def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
@@ -268,12 +271,11 @@ def compute_representations(
         if loaded_reps is not None:
             return loaded_reps
 
-    logger.info("Load path doesn't exist")
+    logger.info("Load path doesn't exist.")
     dataloader: CustomDataLoader = get_dataloader_from_path(
         path, model.transform, num_workers, args
     )
 
-    logger.info(f"Computing representations for path: {path}")
     representations = get_representations(model, dataloader, device, normalized=False)
 
     if args.save:
@@ -305,7 +307,7 @@ def save_outputs(
     hyperparams.pop("data_loader", None)
     hyperparams.pop("data_set", None)
 
-    logger.info(f"Saving representations to: {out_path}")
+    logger.info(f"Saving representations to: {out_path}.")
     np.savez(out_path, model=model, reps=reps, hparams=hyperparams)
 
 
@@ -326,12 +328,12 @@ def load_reps_from_path(
     """
     # Generate the file path
     load_path = get_path(saved_dir, path, model, nsample)
-    logger.info(f"Checking if load path exists: {load_path}")
+    logger.info(f"Checking if load path exists: {load_path}.")
 
     if os.path.exists(load_path):
         saved_file = np.load(f"{load_path}")
         reps = saved_file["reps"]
-        logger.info(f"Loaded representations from {load_path}")
+        logger.info(f"Loaded representations from {load_path}.")
         return reps
     else:
         return None
