@@ -1,20 +1,23 @@
 import inspect
+from typing import Union
+import torch
+
 from .dinov2 import DINOv2Encoder
-#----zmiana-----
-from .dinov3 import DINOv3Encoder #dodany import
+from .dinov3 import DINOv3Encoder
+from .encoder import Encoder
 
+type DinoEncoder = Union[DINOv2Encoder, DINOv3Encoder]
 
-
-MODELS = {
+MODELS: dict[str, type[DinoEncoder]] = {
     "dinov2": DINOv2Encoder,
-    "dinov3": DINOv3Encoder, #dodane
+    "dinov3": DINOv3Encoder,
 }
 
 
-def load_encoder(model_name, device, **kwargs):
+def load_encoder(model_name: str, device: torch.device, **kwargs) -> DinoEncoder:
     """Load feature extractor"""
 
-    model_cls = MODELS[model_name]
+    model_cls: type[DinoEncoder] = MODELS[model_name]
 
     # Get names of model_cls.setup arguments
     signature = inspect.signature(model_cls.setup)
@@ -22,7 +25,7 @@ def load_encoder(model_name, device, **kwargs):
     arguments = arguments[1:]  # Omit `self` arg
 
     # Initialize model using the `arguments` that have been passed in the `kwargs` dict
-    encoder = model_cls(**{arg: kwargs[arg] for arg in arguments if arg in kwargs})
+    encoder: DinoEncoder = model_cls(**{arg: kwargs[arg] for arg in arguments if arg in kwargs})
     encoder.name = model_name
 
     return encoder.to(device)

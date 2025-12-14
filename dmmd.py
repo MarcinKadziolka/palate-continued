@@ -19,6 +19,7 @@
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 Array = jnp.ndarray
 
@@ -31,7 +32,7 @@ _BLOCK_SIZE = 10
 
 
 @jax.jit
-def blockwise_kernel_mean(x, y):
+def blockwise_kernel_mean(x, y) -> float:
     """Computes the mean of the kernel function in a blockwise manner without constructing full matrices."""
     n = x.shape[0]
     num_blocks = n // _BLOCK_SIZE  # Ensure divisibility for simplicity
@@ -66,7 +67,7 @@ def blockwise_kernel_mean(x, y):
 
 
 @jax.jit
-def dmmd_blockwise(x, y):
+def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     """Computes D-MMD using blockwise kernel computation."""
     mean_kxx = blockwise_kernel_mean(x, x)
     mean_kxy = blockwise_kernel_mean(x, y)

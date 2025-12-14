@@ -40,7 +40,7 @@ class DINOv3Encoder(Encoder):
 
             self.model.load_state_dict(state_dict, strict=False)
 
-        def transform(self, img):
+    def transform(self, img):
         """Transformacja obrazu do formatu wejściowego DINOv3"""
         # normalizacja taka jak dla ImageNet
         imagenet_mean = np.array([0.485, 0.456, 0.406])

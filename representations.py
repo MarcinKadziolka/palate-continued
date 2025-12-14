@@ -4,9 +4,11 @@ import numpy as np
 from tqdm import tqdm
 import torch
 from torch.nn.functional import adaptive_avg_pool2d
+from models.load_encoder import DinoEncoder
+from dataloader import CustomDataLoader
 
 
-def get_representations(model, DataLoader, device, normalized=False):
+def get_representations(model: DinoEncoder, DataLoader: CustomDataLoader, device: torch.device, normalized: bool = False) -> np.ndarray:
     """Extracts features from all images in DataLoader given model.
 
     Params:
