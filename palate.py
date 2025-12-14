@@ -52,6 +52,7 @@ M_PALATE_FORMULA_HASH = _formula_hash(M_PALATE_EXPR)
 
 @dataclass(frozen=True)
 class PalateComponents:
+    """Store the partial results of the calculations along with additional data for reproducibility."""
     # computed
     m_palate: Array
     palate: Array
@@ -60,6 +61,7 @@ class PalateComponents:
     dmmd_train: Array
     dmmd_test: Array
     denominator_scale: Array
+    sigma: float
 
     # formulas
     palate_formula: str
@@ -72,19 +74,21 @@ def compute_palate(
     train_representations: np.ndarray,
     test_representations: np.ndarray,
     gen_representations: np.ndarray,
+    sigma: float,
 ) -> PalateComponents:
-    dmmd_train_val, _ = dmmd_blockwise(train_representations, gen_representations)
+    dmmd_train_val, _ = dmmd_blockwise(train_representations, gen_representations, sigma)
     dmmd_test_val, denominator_scale_val = dmmd_blockwise(
-        test_representations, gen_representations
+        test_representations, gen_representations, sigma
     )
 
-    return _compute_palate(dmmd_train_val, dmmd_test_val, denominator_scale_val)
+    return _compute_palate(dmmd_train_val, dmmd_test_val, denominator_scale_val, sigma)
 
 
 def _compute_palate(
     dmmd_test_val: Array,
     dmmd_train_val: Array,
     denominator_scale_val: Array,
+    sigma: float,
 ) -> PalateComponents:
     palate_val = PALATE_FN(dmmd_test_val, dmmd_train_val)
     m_palate_val = M_PALATE_FN(dmmd_test_val, denominator_scale_val, palate_val)
@@ -93,6 +97,7 @@ def _compute_palate(
         denominator_scale=denominator_scale_val,
         dmmd_test=dmmd_test_val,
         dmmd_train=dmmd_train_val,
+        sigma=sigma,
         palate=palate_val,
         m_palate=m_palate_val,
         palate_formula=PALATE_FORMULA,
