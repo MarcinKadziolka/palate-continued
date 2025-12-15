@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s",
+    format="%(asctime)s [%(filename)s:%(lineno)d] [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler()],
 )
 
@@ -91,6 +91,14 @@ parser.add_argument(
     default=None,
     help="Directory for saving experiment outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt. Parent is --output_dir",
 )
+
+parser.add_argument(
+    "--dino_ckpt",
+    type=str,
+    default="/shared/results/gmdziarm/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth",
+    help="Path to dinov3 weights checkpoint if model==dinov3 else no impact.",
+)
+
 
 parser.add_argument("--seed", type=int, default=13579, help="Random seed")
 
@@ -251,11 +259,11 @@ def save_score(
     )
 
 
-def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
+def get_model(args: Namespace, device: torch.device, ckpt: str) -> DinoEncoder:
     return load_encoder(
         args.model,
         device,
-        ckpt=None,
+        ckpt=ckpt,
         arch=None,
         clean_resize=args.clean_resize,
         sinception=True if args.model == "sinception" else False,
@@ -285,7 +293,7 @@ def compute_representations(
         if loaded_reps is not None:
             return loaded_reps
 
-    logger.info("Load path doesn't exist.")
+    logger.warning("Load path doesn't exist.")
     dataloader: CustomDataLoader = get_dataloader_from_path(
         path, model.transform, num_workers, args
     )
@@ -293,14 +301,14 @@ def compute_representations(
     representations = get_representations(model, dataloader, device, normalized=False)
 
     if args.save:
-        save_outputs(
+        save_representations(
             args.repr_dir, path, representations, model, dataloader, args.nsample
         )
 
     return representations
 
 
-def save_outputs(
+def save_representations(
     output_dir: str,
     path: str,
     reps,
@@ -355,12 +363,10 @@ def load_reps_from_path(
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
-    # Example: Create a unique name based on model, checkpoint, and dataloader
-    model_name = model.__class__.__name__
 
     dataset_name = get_last_x_dirs(path)
 
-    return os.path.join(output_dir, f"{model_name}_{dataset_name}_{str(nsample)}.npz")
+    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{str(nsample)}.npz")
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
@@ -400,7 +406,7 @@ def main():
     logger.info(f"Testing path: {test_path}")
     logger.info(f"Gen paths: {gen_paths}")
 
-    model: DinoEncoder = get_model(args, device)
+    model: DinoEncoder = get_model(args, device, args.dino_ckpt)
 
     if args.exp_dir:
         exp_dir = args.exp_dir
