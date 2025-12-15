@@ -82,7 +82,14 @@ parser.add_argument(
     "--output_dir",
     type=str,
     default="./output",
-    help="Directory for saving outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt",
+    help="Main dir for experiments outputs. This dir will contain dir of name --exp_dir if passed, otherwise the name will be randomly generated.",
+)
+
+parser.add_argument(
+    "--exp_dir",
+    type=str,
+    default=None,
+    help="Directory for saving experiment outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt. Parent is --output_dir",
 )
 
 parser.add_argument("--seed", type=int, default=13579, help="Random seed")
@@ -158,13 +165,13 @@ def get_dataloader_from_path(
     return dataloader
 
 
-def create_unique_output_name() -> str:
+def create_unique_exp_dir() -> str:
     if os.getenv("OAR_JOB_ID"):
         unique_str = os.getenv("OAR_JOB_ID")
     else:
         unique_str = uuid.uuid4()
-    logger.info(f"Generated unique output name: {unique_str}")
-    return str(unique_str)[:8]
+    exp_dir = str(unique_str)[:8]
+    return exp_dir
 
 
 def write_to_txt(
@@ -395,6 +402,14 @@ def main():
 
     model: DinoEncoder = get_model(args, device)
 
+    if args.exp_dir:
+        exp_dir = args.exp_dir
+    else:
+        exp_dir = create_unique_exp_dir()
+    output_dir = os.path.join(args.output_dir, exp_dir)
+    logger.info(f"Experiment directory: {output_dir}")
+    write_arguments(args, exp_dir)
+
     train_representations = compute_representations(
         train_path, model, num_workers, device, args
     )
@@ -404,8 +419,6 @@ def main():
         test_path, model, num_workers, device, args
     )
     logger.info("Finished loading/computing test representations")
-    output_dir = args.output_dir
-    write_arguments(args, output_dir)
     logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
 
