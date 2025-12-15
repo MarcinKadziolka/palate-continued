@@ -36,7 +36,6 @@ class DINOv3Encoder(Encoder):
 
         # 2Jeśli podano ścieżkę do wag — wczytaj je
         if self.dino_ckpt is not None:
-            print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
             if self.dino_ckpt.endswith(".safetensors"):
                 state_dict = load_file(self.dino_ckpt)
             else:
