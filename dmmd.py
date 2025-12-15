@@ -28,7 +28,7 @@ Array = jnp.ndarray
 _SIGMA = 0.01 #nowa sigma
 
 
-_BLOCK_SIZE = 10
+_BLOCK_SIZE = 1000
 
 
 @jax.jit
