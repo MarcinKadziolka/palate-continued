@@ -89,8 +89,8 @@ def compute_palate(
 
 
 def _compute_palate(
-    dmmd_test_val: Array,
     dmmd_train_val: Array,
+    dmmd_test_val: Array,
     denominator_scale_val: Array,
     sigma: float,
 ) -> PalateComponents:
