@@ -5,13 +5,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import sympy as sp
-<<<<<<< Updated upstream
-from jaxlib.xla_client import Array
 
-=======
 from jax import Array
 import logging
->>>>>>> Stashed changes
 from dmmd import dmmd_blockwise
 
 logger = logging.getLogger(__name__)

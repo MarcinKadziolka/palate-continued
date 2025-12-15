@@ -29,7 +29,7 @@ from jax import Array
 _SIGMA = 0.01 #nowa sigma
 
 
-_BLOCK_SIZE = 1000
+_BLOCK_SIZE = 100
 
 
 @jax.jit
@@ -71,11 +71,7 @@ def blockwise_kernel_mean(x, y, sigma) -> float:
 
 
 @jax.jit
-<<<<<<< Updated upstream
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[xla_client.Array, xla_client.Array]:
-=======
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[Array, Array]:
->>>>>>> Stashed changes
+def dmmd_blockwise(x, y, sigma):
     """Computes D-MMD using blockwise kernel computation."""
     mean_kxx = blockwise_kernel_mean(x, x, sigma)
     mean_kxy = blockwise_kernel_mean(x, y, sigma)
