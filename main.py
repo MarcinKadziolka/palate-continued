@@ -9,8 +9,7 @@ import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 
-from jax import Array
-
+from jaxlib.xla_client import Array
 import numpy as np
 import torch
 
