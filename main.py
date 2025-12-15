@@ -405,8 +405,7 @@ def main():
         test_path, model, num_workers, device, args
     )
     logger.info("Finished loading/computing test representations")
-    unique_name = create_unique_output_name()
-    output_dir = os.path.join(args.output_dir, unique_name)
+    output_dir = args.output_dir
     write_arguments(args, output_dir)
     logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
