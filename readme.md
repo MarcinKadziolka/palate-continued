@@ -1,6 +1,5 @@
 # main.py — palate runner
 
----
 
 ## Command-line Arguments
 
@@ -10,7 +9,6 @@
 | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `path`   | `str` (one or more) | Paths to image datasets **in order**: `train test gen_1 gen_2 ... gen_n`. At least **3 paths** are required. |
 
----
 
 ### Optional arguments
 
@@ -22,7 +20,6 @@
 | `--dino_ckpt` | path to dinov3 pth checkpoint on the server | Path to DINOv3 weights (used only if `--model dinov3`).                                 |
 | `--sigma`     | `0.01`                                      | Kernel bandwidth used in palate / dmmd computation.                                     |
 
----
 
 #### Sampling & performance
 
@@ -34,7 +31,6 @@
 | `--device`            | auto               | Device to use (`cuda`, `cuda:0`, `cpu`). Auto-selects if not provided. |
 | `--seed`              | `13579`            | Random seed for sampling.                                              |
 
----
 
 #### Representation caching
 
@@ -44,7 +40,6 @@
 | `--save`     | `False`                   | Save computed representations to `repr_dir`.                 |
 | `--load`     | `False`                   | Load representations from `repr_dir` instead of recomputing. |
 
----
 
 #### Experiment output
 
@@ -53,7 +48,6 @@
 | `--output_dir` | `./output`       | Root directory for all experiment outputs.                                   |
 | `--exp_dir`    | random 8-char ID | Name of the experiment directory. If not provided, a unique ID is generated. |
 
----
 
 ## Example Usage
 
@@ -68,7 +62,6 @@ python main.py \
   --load
 ```
 
----
 
 Output Structure
 
@@ -84,7 +77,6 @@ output/
 
 If `--exp_dir` is **not** provided, it is an auto-generated 8-character ID (UUID or cluster job ID).
 
----
 
 ### 2. `metrics_summary.csv`
 
@@ -104,7 +96,6 @@ CIFAR10_train,CIFAR10_test,CIFAR10_CIFAR10-MHGAN,10000,0.7304801,0.49030876,...
 - `Train`, `Test`, `Gen` are derived from the **last two path components**
 - Metric columns correspond to fields of `PalateComponents` in the exact order.
 
----
 
 ### 3. `metrics_summary.txt`
 
@@ -131,7 +122,6 @@ palate_formula_hash: c656cc8e53a0
 ==================================================
 ```
 
----
 
 ### 4. `arguments.txt`
 
@@ -158,7 +148,6 @@ load: True
 ==================================================
 ```
 
----
 
 ### 5. Saved representations (optional)
 
