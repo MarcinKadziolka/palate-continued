@@ -18,7 +18,6 @@ class DINOv3Encoder(Encoder):
         """
         self.dino_size = dino_size
         self.repo_dir = repo_dir
-        self.dino_ckpt = "/home/tadeusz/Downloads/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth" #hardcoded
 
         #Załaduj model z lokalnego repo DINOv3
         if self.dino_size == "b":
