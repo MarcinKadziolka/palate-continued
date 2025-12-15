@@ -39,6 +39,20 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--nsample",
+    type=int,
+    default=10000,
+    help="Maximum number of images to use for calculation.",
+)
+
+parser.add_argument(
+    "--sigma",
+    type=float,
+    default=0.01,
+    help="Sigma to use in blockwise_kernel_mean in dmmd.py",
+)
+
+parser.add_argument(
     "-bs",
     "--batch_size",
     type=int,
@@ -55,13 +69,6 @@ parser.add_argument(
 
 parser.add_argument(
     "--device", type=str, default=None, help="Device to use. Like cuda, cuda:0 or cpu"
-)
-
-parser.add_argument(
-    "--nsample",
-    type=int,
-    default=10000,
-    help="Maximum number of images to use for calculation.",
 )
 
 parser.add_argument(
@@ -411,6 +418,7 @@ def main():
             train_representations=train_representations,
             test_representations=test_representations,
             gen_representations=gen_representations,
+            sigma=args.sigma,
         )
 
         save_score(

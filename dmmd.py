@@ -28,15 +28,18 @@ Array = jnp.ndarray
 _SIGMA = 0.01 #nowa sigma
 
 
-_BLOCK_SIZE = 10
+_BLOCK_SIZE = 1000
 
 
 @jax.jit
-def blockwise_kernel_mean(x, y) -> float:
-    """Computes the mean of the kernel function in a blockwise manner without constructing full matrices."""
+def blockwise_kernel_mean(x, y, sigma) -> float:
+    """Computes the mean of the kernel function in a blockwise manner without constructing full matrices.
+
+    sigma: The bandwidth parameter for the Gaussian RBF kernel. See the paper for more details.
+    """
     n = x.shape[0]
     num_blocks = n // _BLOCK_SIZE  # Ensure divisibility for simplicity
-    gamma = 1 / (2 * _SIGMA**2)
+    gamma = 1 / (2 * sigma**2)
 
     def block_kernel_mean(i, mean_accum):
         row_start = (i // num_blocks) * _BLOCK_SIZE
@@ -67,10 +70,10 @@ def blockwise_kernel_mean(x, y) -> float:
 
 
 @jax.jit
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray) -> tuple[xla_client.Array, xla_client.Array]:
+def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[xla_client.Array, xla_client.Array]:
     """Computes D-MMD using blockwise kernel computation."""
-    mean_kxx = blockwise_kernel_mean(x, x)
-    mean_kxy = blockwise_kernel_mean(x, y)
-    mean_kyy = blockwise_kernel_mean(y, y)
+    mean_kxx = blockwise_kernel_mean(x, x, sigma)
+    mean_kxy = blockwise_kernel_mean(x, y, sigma)
+    mean_kyy = blockwise_kernel_mean(y, y, sigma)
 
     return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
