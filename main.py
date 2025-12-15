@@ -17,7 +17,7 @@ from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
-from palate import compute_palate, PalateComponents
+from palate import compute_palate, PalateComponents, flatten_dataclass
 from representations import get_representations
 
 logger = logging.getLogger(__name__)
@@ -35,14 +35,14 @@ parser.add_argument(
     type=str,
     default="dinov2",
     choices=MODELS.keys(),
-    help="Model to use for generating feature representations.",
+    help="Encoder model used to generate representations.",
 )
 
 parser.add_argument(
     "--nsample",
     type=int,
     default=10000,
-    help="Maximum number of images to use for calculation.",
+    help="Maximum number of images used per dataset.",
 )
 
 parser.add_argument(
@@ -75,28 +75,28 @@ parser.add_argument(
     "path",
     type=str,
     nargs="+",
-    help="Paths to the images. The order is train, test, gen_1, gen_2, ..., gen_n.",
+    help="Paths to image datasets in order: train test gen_1 gen_2 ... gen_n. At least 3 paths are required.",
 )
 
 parser.add_argument(
     "--output_dir",
     type=str,
     default="./output",
-    help="Main dir for experiments outputs. This dir will contain dir of name --exp_dir if passed, otherwise the name will be randomly generated.",
+    help="Root directory for all experiment outputs.",
 )
 
 parser.add_argument(
     "--exp_dir",
     type=str,
     default=None,
-    help="Directory for saving experiment outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt. Parent is --output_dir",
+    help="Name of the experiment directory. If not provided, a unique ID is generated. Parent is --output_dir",
 )
 
 parser.add_argument(
     "--dino_ckpt",
     type=str,
     default="/shared/results/gmdziarm/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth",
-    help="Path to dinov3 weights checkpoint if model==dinov3 else no impact.",
+    help="Path to dinov3 weights (used only if --model dinov3).",
 )
 
 
@@ -117,17 +117,17 @@ parser.add_argument(
     "--repr_dir",
     type=str,
     default="./saved_representations",
-    help="Dir to store saved representations.",
+    help="Directory for cached representations.",
 )
 
 parser.add_argument(
-    "--save", action="store_true", help="Save representations to repr_dir."
+    "--save", action="store_true", help="Save computed representations to repr_dir."
 )
 
 parser.add_argument(
     "--load",
     action="store_true",
-    help="Load representations from repr_dir instead of calculating them again",
+    help="Load representations from repr_dir instead of recomputing.",
 )
 
 
@@ -195,10 +195,8 @@ def write_to_txt(
     out_path = os.path.join(output_dir, out_file)
 
     with open(out_path, "a") as f:
-        f.write(f"Model: {model}\n")
-        f.write(
-            f"Train: {train_path}, Test: {test_path}, Gen: {gen_path}, Nsample: {nsample}\n"
-        )
+        f.write(f"Model: {model.arch_str}\n")
+        f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\n")
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
@@ -246,10 +244,7 @@ def save_score(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    palate_fields = dataclasses.fields(palate_components)
-    scores = {}
-    for field in palate_fields:
-        scores[field.name] = getattr(palate_components, field.name)
+    scores = flatten_dataclass(palate_components)
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
     write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
@@ -366,7 +361,7 @@ def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> st
 
     dataset_name = get_last_x_dirs(path)
 
-    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{str(nsample)}.npz")
+    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{nsample}.npz")
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
@@ -382,10 +377,11 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
 
     file_path = os.path.join(output_dir, filename)
 
-    with open(file_path, "w") as f:
+    with open(file_path, "a") as f:
         for arg in vars(args):
             value = getattr(args, arg)
             f.write(f"{arg}: {value}\n")
+        f.write("\n" + "=" * 50 + "\n\n")
 
 
 def main():
@@ -412,9 +408,9 @@ def main():
         exp_dir = args.exp_dir
     else:
         exp_dir = create_unique_exp_dir()
-    output_dir = os.path.join(args.output_dir, exp_dir)
-    logger.info(f"Experiment directory: {output_dir}")
-    write_arguments(args, exp_dir)
+    output_experiment_dir = os.path.join(args.output_dir, exp_dir)
+    logger.info(f"Experiment directory: {output_experiment_dir}")
+    write_arguments(args, output_experiment_dir)
 
     train_representations = compute_representations(
         train_path, model, num_workers, device, args
@@ -441,7 +437,7 @@ def main():
 
         save_score(
             palate_components,
-            output_dir,
+            output_experiment_dir,
             model,
             train_path,
             test_path,
