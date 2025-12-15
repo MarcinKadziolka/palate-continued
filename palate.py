@@ -23,7 +23,7 @@ M_PALATE_EXPR = (
 
 MODULE_FOR_SYMPY = "numpy"
 PALATE_FN = sp.lambdify(
-    (dmmd_test_sym, dmmd_train_sym),
+    (dmmd_train_sym, dmmd_test_sym),
     PALATE_EXPR,
     modules=MODULE_FOR_SYMPY,
 )
@@ -128,7 +128,7 @@ def _compute_palate_from_dmmd(dmmd: DmmdValues) -> PalateMetric:
     logger.info("Computing palate metrics...")
     t0 = time.time()
 
-    palate_val = PALATE_FN(dmmd.test, dmmd.train)
+    palate_val = PALATE_FN(dmmd.train, dmmd.test)
     m_palate_val = M_PALATE_FN(
         dmmd.test,
         dmmd.denominator_scale,
