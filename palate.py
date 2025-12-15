@@ -86,7 +86,7 @@ class PalateComponents(IterableDataclass):
     palate_formula_hash: str
 
 
-def flatten_dataclass(data_class: IterableDataclass):
+def flatten_dataclass(data_class: IterableDataclass) -> dict[str, float | str]:
     field_to_value = {}
     for field, value in data_class:
         if isinstance(value, IterableDataclass):
