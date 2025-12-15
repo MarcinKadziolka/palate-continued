@@ -18,6 +18,7 @@ class DINOv3Encoder(Encoder):
         """
         self.dino_size = dino_size
         self.repo_dir = repo_dir
+        self.dino_ckpt = dino_ckpt
 
         #Załaduj model z lokalnego repo DINOv3
         if self.dino_size == "b":
