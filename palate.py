@@ -17,8 +17,7 @@ palate_sym = sp.symbols("palate")
 
 PALATE_EXPR = dmmd_test_sym / (dmmd_test_sym + dmmd_train_sym)
 M_PALATE_EXPR = (
-    dmmd_test_sym / (2 * denominator_scale_sym)
-    + sp.Rational(1, 2) * palate_sym
+    dmmd_test_sym / (2 * denominator_scale_sym) + sp.Rational(1, 2) * palate_sym
 )
 
 MODULE_FOR_SYMPY = "numpy"
@@ -46,13 +45,13 @@ def formula_hash(expr: sp.Expr) -> str:
 PALATE_FORMULA_HASH = formula_hash(PALATE_EXPR)
 M_PALATE_FORMULA_HASH = formula_hash(M_PALATE_EXPR)
 
+
 @dataclass(frozen=True)
 class IterableDataclass:
     def __iter__(self):
         fields = dataclasses.fields(self)
         for field in fields:
             yield field.name, getattr(self, field.name)
-
 
 
 @dataclass(frozen=True)
@@ -69,6 +68,24 @@ class PalateMetrics(IterableDataclass):
     palate: Array
 
 
+@dataclass(frozen=True)
+class PalateComponents(IterableDataclass):
+    """Store the partial results of the calculations along with additional data for reproducibility."""
+
+    # computed
+    palate_metrics: PalateMetrics
+
+    # raw
+    dmmd_values: DmmdValues
+    sigma: float
+
+    # formulas
+    m_palate_formula: str
+    palate_formula: str
+    m_palate_formula_hash: str
+    palate_formula_hash: str
+
+
 def flatten_dataclass(data_class: IterableDataclass):
     field_to_value = {}
     for field, value in data_class:
@@ -78,23 +95,6 @@ def flatten_dataclass(data_class: IterableDataclass):
         else:
             field_to_value[field] = value
     return field_to_value
-
-
-@dataclass(frozen=True)
-class PalateComponents(IterableDataclass):
-    """Store the partial results of the calculations along with additional data for reproducibility."""
-    # computed
-    palate_metrics: PalateMetrics
-
-    # raw
-    dmmd: DmmdValues
-    sigma: float
-
-    # formulas
-    m_palate_formula: str
-    palate_formula: str
-    m_palate_formula_hash: str
-    palate_formula_hash: str
 
 
 def compute_palate(
@@ -126,18 +126,18 @@ def compute_palate(
 
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
-    dmmd = DmmdValues(
+    dmmd_values = DmmdValues(
         train_gen=dmmd_train_gen,
         test_gen=dmmd_test_gen,
         test_train=dmmd_test_train,
         denominator_scale=denominator_scale,
     )
 
-    palate_metrics = _compute_palate_from_dmmd(dmmd)
+    palate_metrics = _compute_palate_from_dmmd(dmmd_values)
 
     return PalateComponents(
         palate_metrics=palate_metrics,
-        dmmd=dmmd,
+        dmmd_values=dmmd_values,
         sigma=sigma,
         palate_formula=PALATE_FORMULA,
         m_palate_formula=M_PALATE_FORMULA,
