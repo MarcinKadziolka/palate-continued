@@ -1,5 +1,6 @@
 # This code has been adapted from Meta’s DINOv3 (https://github.com/facebookresearch/dinov3)
-
+import logging
+import os
 import torch
 import torch.nn as nn
 import torchvision.transforms as TF
@@ -7,10 +8,15 @@ import numpy as np
 from safetensors.torch import load_file
 from PIL import Image
 from .encoder import Encoder
+import pathlib
+from typing import Optional
+import logging
 
+
+logger = logging.getLogger(__name__)
 
 class DINOv3Encoder(Encoder):
-    def setup(self, dino_size="b", repo_dir="./dinov3", dino_ckpt=None):
+    def setup(self, dino_size="l", repo_dir="./dinov3", ckpt: Optional[str] = None):
         """
         dino_size: 'b' (ViT-B/16) or 's' (ViT-S/16)
         repo_dir: local path to DINOv3 repo containing hubconf.py
@@ -18,27 +24,26 @@ class DINOv3Encoder(Encoder):
         """
         self.dino_size = dino_size
         self.repo_dir = repo_dir
-        self.dino_ckpt = dino_ckpt
-        print(self.dino_ckpt, self.dino_size, "sssssssssssssssssssssssssssssssss")
-        #Załaduj model z lokalnego repo DINOv3
-        if self.dino_size == "b":
-            self.model = torch.hub.load(
-                self.repo_dir, "dinov3_vitb16", source="local", pretrained=False #żeby wczytać własne wagi
-            )
-        else:
-            self.model = torch.hub.load(
-                self.repo_dir, "dinov3_vits16", source="local", pretrained=False #szybszy ale gorszy
-            )
+        self.dino_ckpt = ckpt
+        self.arch_str = f"dinov3_vit{self.dino_size}16"
 
-        # 2Jeśli podano ścieżkę do wag — wczytaj je
-        if self.dino_ckpt is not None:
-            print("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        self.model = torch.hub.load(
+            self.repo_dir, self.arch_str, source="local", pretrained=False
+        )
+
+        if self.dino_ckpt is not None and os.path.exists(self.dino_ckpt):
+            self.arch_str = pathlib.Path(self.dino_ckpt).stem
             if self.dino_ckpt.endswith(".safetensors"):
                 state_dict = load_file(self.dino_ckpt)
             else:
                 state_dict = torch.load(self.dino_ckpt, map_location="cpu")
 
             self.model.load_state_dict(state_dict, strict=False)
+        else:
+            logger.warning(f"Initialized {self.arch_str} model with random weights. Checkpoint is either None or doesn't exist: {self.dino_ckpt=}")
+
+        self.model.eval()
+
 
     def transform(self, img):
         """Transformacja obrazu do formatu wejściowego DINOv3"""
@@ -56,4 +61,3 @@ class DINOv3Encoder(Encoder):
             ]
         )(img)
         return img
-

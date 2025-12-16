@@ -13,7 +13,7 @@ encoder = DINOv3Encoder()
 encoder.setup(
     dino_size="b",
     repo_dir="dinov3",  # lokalny folder z DINOv3
-    dino_ckpt=None#"model.safetensors"  # plik wag
+    ckpt=None#"model.safetensors"  # plik wag
 )
 
 # Wczytaj przykładowy obraz

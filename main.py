@@ -17,14 +17,14 @@ from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
-from palate import compute_palate, PalateComponents
+from palate import compute_palate, PalateComponents, flatten_dataclass
 from representations import get_representations
 
 logger = logging.getLogger(__name__)
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s",
+    format="%(asctime)s [%(filename)s:%(lineno)d] [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler()],
 )
 
@@ -35,14 +35,14 @@ parser.add_argument(
     type=str,
     default="dinov2",
     choices=MODELS.keys(),
-    help="Model to use for generating feature representations.",
+    help="Encoder model used to generate representations.",
 )
 
 parser.add_argument(
     "--nsample",
     type=int,
     default=10000,
-    help="Maximum number of images to use for calculation.",
+    help="Maximum number of images used per dataset.",
 )
 
 parser.add_argument(
@@ -75,15 +75,30 @@ parser.add_argument(
     "path",
     type=str,
     nargs="+",
-    help="Paths to the images. The order is train, test, gen_1, gen_2, ..., gen_n.",
+    help="Paths to image datasets in order: train test gen_1 gen_2 ... gen_n. At least 3 paths are required.",
 )
 
 parser.add_argument(
     "--output_dir",
     type=str,
     default="./output",
-    help="Directory for saving outputs: metrics_summary.csv, metrics_summary.txt and arguments.txt",
+    help="Root directory for all experiment outputs.",
 )
+
+parser.add_argument(
+    "--exp_dir",
+    type=str,
+    default=None,
+    help="Name of the experiment directory. If not provided, a unique ID is generated. Parent is --output_dir",
+)
+
+parser.add_argument(
+    "--dino_ckpt",
+    type=str,
+    default="/shared/results/gmdziarm/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth",
+    help="Path to dinov3 weights (used only if --model dinov3).",
+)
+
 
 parser.add_argument("--seed", type=int, default=13579, help="Random seed")
 
@@ -102,17 +117,17 @@ parser.add_argument(
     "--repr_dir",
     type=str,
     default="./saved_representations",
-    help="Dir to store saved representations.",
+    help="Directory for cached representations.",
 )
 
 parser.add_argument(
-    "--save", action="store_true", help="Save representations to repr_dir."
+    "--save", action="store_true", help="Save computed representations to repr_dir."
 )
 
 parser.add_argument(
     "--load",
     action="store_true",
-    help="Load representations from repr_dir instead of calculating them again",
+    help="Load representations from repr_dir instead of recomputing.",
 )
 
 
@@ -158,13 +173,13 @@ def get_dataloader_from_path(
     return dataloader
 
 
-def create_unique_output_name() -> str:
+def create_unique_exp_dir() -> str:
     if os.getenv("OAR_JOB_ID"):
         unique_str = os.getenv("OAR_JOB_ID")
     else:
         unique_str = uuid.uuid4()
-    logger.info(f"Generated unique output name: {unique_str}")
-    return str(unique_str)[:8]
+    exp_dir = str(unique_str)[:8]
+    return exp_dir
 
 
 def write_to_txt(
@@ -175,15 +190,14 @@ def write_to_txt(
     test_path: str,
     gen_path: str,
     nsample: int,
+    sigma,
 ):
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
     with open(out_path, "a") as f:
-        f.write(f"Model: {model}\n")
-        f.write(
-            f"Train: {train_path}, Test: {test_path}, Gen: {gen_path}, Nsample: {nsample}\n"
-        )
+        f.write(f"Model: {model.arch_str}\n")
+        f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n")
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
@@ -192,10 +206,12 @@ def write_to_txt(
 def write_to_csv(
     scores: dict[str, Array | str],
     output_dir,
+    model,
     train_name,
     test_name,
     gen_name,
     nsample,
+    sigma,
 ):
     csv_file = os.path.join(output_dir, "metrics_summary.csv")
     file_exists = os.path.isfile(csv_file)
@@ -203,9 +219,9 @@ def write_to_csv(
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            header = ["Train", "Test", "Gen", "Nsample"] + list(scores.keys())
+            header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
             writer.writerow(header)
-        row = [train_name, test_name, gen_name, nsample] + list(scores.values())
+        row = [model.arch_str, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
         writer.writerow(row)
 
 
@@ -223,6 +239,7 @@ def save_score(
     test_path,
     gen_path,
     nsample,
+    sigma,
 ):
 
     train_name = get_last_x_dirs(train_path)
@@ -231,24 +248,21 @@ def save_score(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    palate_fields = dataclasses.fields(palate_components)
-    scores = {}
-    for field in palate_fields:
-        scores[field.name] = getattr(palate_components, field.name)
+    scores = flatten_dataclass(palate_components)
 
-    write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
-    write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
+    write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
+    write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
 
     logger.info(
         f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}"
     )
 
 
-def get_model(args: Namespace, device: torch.device) -> DinoEncoder:
+def get_model(args: Namespace, device: torch.device, ckpt: str) -> DinoEncoder:
     return load_encoder(
         args.model,
         device,
-        ckpt=None,
+        ckpt=ckpt,
         arch=None,
         clean_resize=args.clean_resize,
         sinception=True if args.model == "sinception" else False,
@@ -278,7 +292,7 @@ def compute_representations(
         if loaded_reps is not None:
             return loaded_reps
 
-    logger.info("Load path doesn't exist.")
+    logger.warning("Load path doesn't exist.")
     dataloader: CustomDataLoader = get_dataloader_from_path(
         path, model.transform, num_workers, args
     )
@@ -286,14 +300,14 @@ def compute_representations(
     representations = get_representations(model, dataloader, device, normalized=False)
 
     if args.save:
-        save_outputs(
+        save_representations(
             args.repr_dir, path, representations, model, dataloader, args.nsample
         )
 
     return representations
 
 
-def save_outputs(
+def save_representations(
     output_dir: str,
     path: str,
     reps,
@@ -348,12 +362,10 @@ def load_reps_from_path(
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
-    # Example: Create a unique name based on model, checkpoint, and dataloader
-    model_name = model.__class__.__name__
 
     dataset_name = get_last_x_dirs(path)
 
-    return os.path.join(output_dir, f"{model_name}_{dataset_name}_{str(nsample)}.npz")
+    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{nsample}.npz")
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
@@ -369,10 +381,11 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
 
     file_path = os.path.join(output_dir, filename)
 
-    with open(file_path, "w") as f:
+    with open(file_path, "a") as f:
         for arg in vars(args):
             value = getattr(args, arg)
             f.write(f"{arg}: {value}\n")
+        f.write("\n" + "=" * 50 + "\n\n")
 
 
 def main():
@@ -393,7 +406,15 @@ def main():
     logger.info(f"Testing path: {test_path}")
     logger.info(f"Gen paths: {gen_paths}")
 
-    model: DinoEncoder = get_model(args, device)
+    model: DinoEncoder = get_model(args, device, args.dino_ckpt)
+
+    if args.exp_dir:
+        exp_dir = args.exp_dir
+    else:
+        exp_dir = create_unique_exp_dir()
+    output_experiment_dir = os.path.join(args.output_dir, exp_dir)
+    logger.info(f"Experiment directory: {output_experiment_dir}")
+    write_arguments(args, output_experiment_dir)
 
     train_representations = compute_representations(
         train_path, model, num_workers, device, args
@@ -404,9 +425,6 @@ def main():
         test_path, model, num_workers, device, args
     )
     logger.info("Finished loading/computing test representations")
-    unique_name = create_unique_output_name()
-    output_dir = os.path.join(args.output_dir, unique_name)
-    write_arguments(args, output_dir)
     logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
 
@@ -423,12 +441,13 @@ def main():
 
         save_score(
             palate_components,
-            output_dir,
+            output_experiment_dir,
             model,
             train_path,
             test_path,
             gen_path,
             args.nsample,
+            args.sigma
         )
 
 

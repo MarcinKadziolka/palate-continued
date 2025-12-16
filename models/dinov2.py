@@ -64,14 +64,14 @@ class DINOv2Encoder(Encoder):
 
         self.arch = arch
 
-        arch_str = f"dinov2_{self.arch}"
+        self.arch_str = f"dinov2_{self.arch}"
 
         if self.arch not in VALID_ARCHITECTURES:
             sys.exit(
                 f"arch={self.arch} is not a valid architecture. Choose from {VALID_ARCHITECTURES}"
             )
 
-        self.model = torch.hub.load("facebookresearch/dinov2", arch_str)
+        self.model = torch.hub.load("facebookresearch/dinov2", self.arch_str)
         self.clean_resize = clean_resize
 
     def transform(self, img) -> Tensor:
