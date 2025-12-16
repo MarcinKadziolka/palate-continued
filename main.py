@@ -190,13 +190,14 @@ def write_to_txt(
     test_path: str,
     gen_path: str,
     nsample: int,
+    sigma,
 ):
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
     with open(out_path, "a") as f:
         f.write(f"Model: {model.arch_str}\n")
-        f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\n")
+        f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n")
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
@@ -209,6 +210,7 @@ def write_to_csv(
     test_name,
     gen_name,
     nsample,
+    sigma,
 ):
     csv_file = os.path.join(output_dir, "metrics_summary.csv")
     file_exists = os.path.isfile(csv_file)
@@ -216,9 +218,9 @@ def write_to_csv(
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            header = ["Train", "Test", "Gen", "Nsample"] + list(scores.keys())
+            header = ["train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
             writer.writerow(header)
-        row = [train_name, test_name, gen_name, nsample] + list(scores.values())
+        row = [train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
         writer.writerow(row)
 
 
@@ -236,6 +238,7 @@ def save_score(
     test_path,
     gen_path,
     nsample,
+    sigma,
 ):
 
     train_name = get_last_x_dirs(train_path)
@@ -246,8 +249,8 @@ def save_score(
 
     scores = flatten_dataclass(palate_components)
 
-    write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample)
-    write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample)
+    write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
+    write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample, sigma)
 
     logger.info(
         f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}"
@@ -443,6 +446,7 @@ def main():
             test_path,
             gen_path,
             args.nsample,
+            args.sigma
         )
 
 
