@@ -206,6 +206,7 @@ def write_to_txt(
 def write_to_csv(
     scores: dict[str, Array | str],
     output_dir,
+    model,
     train_name,
     test_name,
     gen_name,
@@ -218,9 +219,9 @@ def write_to_csv(
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            header = ["train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
+            header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
             writer.writerow(header)
-        row = [train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
+        row = [model.arch_str, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
         writer.writerow(row)
 
 
@@ -250,7 +251,7 @@ def save_score(
     scores = flatten_dataclass(palate_components)
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
-    write_to_csv(scores, output_dir, train_name, test_name, gen_name, nsample, sigma)
+    write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
 
     logger.info(
         f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}"
