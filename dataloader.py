@@ -131,8 +131,9 @@ class CustomDataLoader:
         if not self.files:
             # Assume sub-folders for image classes
             class_dirs = sorted(
-                image_path.glob("[0-9]"), key=get_order
-            )  # look for all subfolders in the numerical order
+                [p for p in image_path.iterdir() if p.is_dir() and p.name.isdigit()],
+                key=get_order
+            )
             logger.info(f"Found {len(class_dirs)} classes in {image_path}")
             self.files = []
             for f in class_dirs:
