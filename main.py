@@ -12,6 +12,8 @@ from typing import Literal, Optional, Callable
 from jaxlib.xla_client import Array
 import numpy as np
 import torch
+from palate_local_knn import compute_local_palate_knn
+
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -230,18 +232,17 @@ def get_last_x_dirs(path: str, x=2):
     x = min(x, len(parts))
     return "_".join(parts[-x:])
 
-
 def save_score(
-    palate_components: PalateComponents,
-    output_dir: str,
-    model,
-    train_path,
-    test_path,
-    gen_path,
-    nsample,
-    sigma,
+        palate_components,
+        output_dir,
+        model,
+        train_path,
+        test_path,
+        gen_path,
+        nsample,
+        sigma,
+        extra_scores,
 ):
-
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
     gen_name = get_last_x_dirs(gen_path)
@@ -249,6 +250,9 @@ def save_score(
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     scores = flatten_dataclass(palate_components)
+
+    if extra_scores is not None:
+        scores.update(extra_scores)
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
     write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
@@ -439,15 +443,27 @@ def main():
             sigma=args.sigma,
         )
 
+        local_scores = compute_local_palate_knn(
+            train_repr, test_repr, gen_repr, k=50, sigma=None
+        )
+
+        local_summary = {
+            "local_palate_mean": float(local_scores.mean()),
+            "local_palate_median": float(np.median(local_scores)),
+            "local_palate_std": float(local_scores.std()),
+            "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
+        }
+
         save_score(
             palate_components,
-            output_experiment_dir,
+            output_dir,
             model,
             train_path,
             test_path,
             gen_path,
             args.nsample,
-            args.sigma
+            args.sigma,
+            extra_scores=local_summary,  # ← plugs straight in
         )
 
 
