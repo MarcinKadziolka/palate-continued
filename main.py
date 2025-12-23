@@ -444,7 +444,7 @@ def main():
         )
 
         local_scores = compute_local_palate_knn(
-            train_repr, test_repr, gen_repr, k=50, sigma=None
+            train_representations, test_representations, gen_representations, k=50, sigma=None
         )
 
         local_summary = {
@@ -456,7 +456,7 @@ def main():
 
         save_score(
             palate_components,
-            output_dir,
+            output_experiment_dir,
             model,
             train_path,
             test_path,
