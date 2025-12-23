@@ -51,7 +51,7 @@ MAIN_METRICS = [".* Top 1"]
 class TrainConfig:
     dataset: str = MISSING  # train dataset path
     batch_size: int = 256  # batch size for train set feature extraction
-    num_workers: int = 5  # number of workers for train set feature extraction
+    num_workers: int = 0  # number of workers for train set feature extraction
     ks: Tuple[int, ...] = (10, 20, 100, 200)  # values of k to evaluate
     temperature: float = 0.07
     """
@@ -66,7 +66,7 @@ class EvalConfig:
     test_dataset: str = MISSING  # test dataset path
     test_metric_type: ClassificationMetricType = ClassificationMetricType.MEAN_ACCURACY
     batch_size: int | None = None  # batch size for evaluation, None to use train batch size
-    num_workers: int = 5  # number of workers for evaluation
+    num_workers: int = 0  # number of workers for evaluation
 
 
 @dataclass

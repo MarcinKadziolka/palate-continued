@@ -68,7 +68,7 @@ class TrainConfig:
     val_dataset: Optional[str] = None  # val dataset path. If None, choose hyperparameters on 10% of the train set.
     val_metric_type: ClassificationMetricType = ClassificationMetricType.MEAN_ACCURACY
     batch_size: int = 256  # batch size for train and val set feature extraction
-    num_workers: int = 5  # number of workers for train and val set feature extraction
+    num_workers: int = 0  # number of workers for train and val set feature extraction
     tol: float = 1e-12  # tolerance in logistic regression
     train_features_device: str = "cpu"  # device to gather train features (cpu, cuda, cuda:0, etc.)
     train_dtype: str = "float64"  # data type to convert the train features to
@@ -79,7 +79,7 @@ class TrainConfig:
 class EvalConfig:
     test_dataset: str = MISSING  # test dataset path
     batch_size: int | None = None  # use train.batch_size if None
-    num_workers: int = 5
+    num_workers: int = 0
     test_metric_type: Optional[ClassificationMetricType] = None
 
 
