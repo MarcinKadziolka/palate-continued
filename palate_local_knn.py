@@ -57,3 +57,119 @@ def compute_local_palate_knn(
         r_values[i] = p_tr / (p_tr + p_te + EPS)
 
     return r_values
+
+import numpy as np
+from tqdm import tqdm
+
+def compute_global_palate_batched(train, test, gen, sigma, batch_size=500):
+
+    train = train.astype(np.float32)
+    test  = test.astype(np.float32)
+    gen   = gen.astype(np.float32)
+
+    N = len(gen)
+    r_values = np.zeros(N, dtype=np.float32)
+
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE batched"):
+        batch = gen[i:i+batch_size]      # [B, D]
+
+        # squared distances in bulk using matrix operations
+        d_tr = np.sum((train[None,:,:] - batch[:,None,:])**2, axis=2)  # [B, N_train]
+        d_te = np.sum((test[None,:,:]  - batch[:,None,:])**2, axis=2)  # [B, N_test]
+
+        p_tr = np.exp(-d_tr / (2*sigma**2)).mean(axis=1)  # density estimate per sample
+        p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
+
+        r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
+
+    return r_values
+
+import numpy as np
+from tqdm import tqdm
+
+def estimate_sigma(train, samples=1000):
+    """
+    Sigma = sqrt(median(squared_distances) / 2)
+    """
+
+    idx = np.random.choice(len(train), min(samples, len(train)), replace=False)
+    sub = train[idx]
+
+    # squared distances from cosine similarity
+    sim = sub @ sub.T                         # cosine similarity matrix
+    dist2 = 2 - 2 * sim                       # squared L2 distances
+
+    dist2 = dist2[dist2 > 1e-8]               # remove diagonal self-distances
+
+    median_dist2 = np.median(dist2)           # median of squared distances
+    sigma = np.sqrt(median_dist2 / 2)         # ← correct formula
+
+    return sigma
+
+
+
+def compute_global_palate_fast(train, test, gen, sigma=None, batch_size=500):
+
+    # ---- normalize first ----
+    train = train.astype(np.float32)
+    test  = test.astype(np.float32)
+    gen   = gen.astype(np.float32)
+
+    train /= np.linalg.norm(train, axis=1, keepdims=True) + 1e-8
+    test  /= np.linalg.norm(test, axis=1, keepdims=True) + 1e-8
+    gen   /= np.linalg.norm(gen, axis=1, keepdims=True) + 1e-8
+
+    # ---- auto sigma ----
+    if sigma is None:
+        print("Estimating sigma...")
+        sigma = estimate_sigma(train)
+        print(f"Sigma = {sigma:.4f}")
+
+    N = len(gen)
+    r_values = np.zeros(N, dtype=np.float32)
+
+    # ---- main loop ----
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE FAST"):
+        batch = gen[i:i+batch_size]                # (B, D)
+
+        sim_tr = batch @ train.T                   # (B, N_train)
+        sim_te = batch @ test.T                    # (B, N_test)
+
+        d_tr = 2 - 2*sim_tr
+        d_te = 2 - 2*sim_te
+
+        p_tr = np.exp(-d_tr / (2*sigma**2)).mean(axis=1)
+        p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
+
+        r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
+
+    return r_values
+
+def compute_global_palate_fast_no_norm(train, test, gen, sigma=None, batch_size=500):
+
+    train = train.astype(np.float32)
+    test  = test.astype(np.float32)
+    gen   = gen.astype(np.float32)
+
+    if sigma is None:
+        print("Estimating sigma...")
+        sigma = estimate_sigma(train)   # works even without norm
+        print(f"Sigma = {sigma:.4f}")
+
+    N = len(gen)
+    r_values = np.zeros(N, dtype=np.float32)
+
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE (no norm)"):
+
+        batch = gen[i:i+batch_size]                  # (B, D)
+
+        # true squared Euclidean distance
+        d_tr = np.sum((batch[:,None,:] - train[None,:,:])**2, axis=2)
+        d_te = np.sum((batch[:,None,:]  - test[None,:,:])**2, axis=2)
+
+        p_tr = np.exp(-d_tr / (2*sigma**2)).mean(axis=1)
+        p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
+
+        r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
+
+    return r_values

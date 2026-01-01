@@ -13,7 +13,7 @@ from jaxlib.xla_client import Array
 import numpy as np
 import torch
 from palate_local_knn import compute_local_palate_knn
-
+from palate_local_knn import compute_global_palate_fast
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -443,8 +443,8 @@ def main():
             sigma=args.sigma,
         )
 
-        local_scores = compute_local_palate_knn(
-            train_representations, test_representations, gen_representations, k=50, sigma=None
+        local_scores = compute_global_palate_fast(
+            train_representations, test_representations, gen_representations, sigma=None, batch_size=1000
         )
 
         local_summary = {
@@ -456,7 +456,8 @@ def main():
 
         save_score(
             palate_components,
-            output_experiment_dir,
+            output_experiment_dir
+            ,
             model,
             train_path,
             test_path,
