@@ -143,7 +143,7 @@ def compute_global_palate_fast(train, test, gen, sigma=None, batch_size=500):
 
         r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
 
-    return r_values
+    return r_values, sigma
 
 def compute_global_palate_fast_no_norm(train, test, gen, sigma=None, batch_size=500):
 

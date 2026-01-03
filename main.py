@@ -443,7 +443,7 @@ def main():
             sigma=args.sigma,
         )
 
-        local_scores = compute_global_palate_fast(
+        local_scores, sigma = compute_global_palate_fast(
             train_representations, test_representations, gen_representations, sigma=None, batch_size=1000
         )
 
@@ -452,6 +452,7 @@ def main():
             "local_palate_median": float(np.median(local_scores)),
             "local_palate_std": float(local_scores.std()),
             "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
+            "estimated sigma": float(sigma),
         }
 
         save_score(
