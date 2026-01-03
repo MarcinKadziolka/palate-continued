@@ -444,8 +444,14 @@ def main():
         )
 
         local_scores, sigma = compute_local_palate_knn(
+            train_representations, test_representations, gen_representations
+        )
+
+        '''
+        local_scores, sigma = compute_global_palate_fast(
             train_representations, test_representations, gen_representations, sigma=None, batch_size=1000
         )
+        '''
 
         local_summary = {
             "local_palate_mean": float(local_scores.mean()),
