@@ -145,7 +145,7 @@ def compute_global_palate_fast(train, test, gen, sigma=None, batch_size=500):
 
     return r_values, sigma
 
-def compute_global_palate_fast_no_norm(train, test, gen, sigma=1, batch_size=500):
+def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_size=200):
 
     train = train.astype(np.float32)
     test  = test.astype(np.float32)
