@@ -14,6 +14,7 @@ import numpy as np
 import torch
 from palate_local_knn import compute_local_palate_knn
 from palate_local_knn import compute_global_palate_fast
+from palate_local_knn import compute_global_palate_fast_unnormalized
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -443,15 +444,11 @@ def main():
             sigma=args.sigma,
         )
 
-        local_scores, sigma = compute_local_palate_knn(
-            train_representations, test_representations, gen_representations
+
+        local_scores, sigma = compute_global_palate_fast_unnormalized(
+            train_representations, test_representations, gen_representations, sigma=1, batch_size=1000
         )
 
-        '''
-        local_scores, sigma = compute_global_palate_fast(
-            train_representations, test_representations, gen_representations, sigma=None, batch_size=1000
-        )
-        '''
 
         local_summary = {
             "local_palate_mean": float(local_scores.mean()),
