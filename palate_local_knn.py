@@ -43,6 +43,7 @@ def compute_local_palate_knn(
             train[:estimate_sigma_samples], n_neighbors=k
         )
         sigma = np.median(dists[:, -1])
+        print(sigma, "SSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSSS")
 
     # ---- Local PALATE ----
     r_values = np.zeros(len(gen), dtype=np.float32)
