@@ -443,7 +443,7 @@ def main():
             sigma=args.sigma,
         )
 
-        local_scores, sigma = compute_global_palate_fast(
+        local_scores, sigma = compute_local_palate_knn(
             train_representations, test_representations, gen_representations, sigma=None, batch_size=1000
         )
 

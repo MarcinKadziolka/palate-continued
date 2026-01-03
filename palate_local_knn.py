@@ -56,7 +56,7 @@ def compute_local_palate_knn(
 
         r_values[i] = p_tr / (p_tr + p_te + EPS)
 
-    return r_values
+    return r_values, sigma
 
 import numpy as np
 from tqdm import tqdm
