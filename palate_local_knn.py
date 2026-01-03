@@ -87,7 +87,7 @@ def compute_global_palate_batched(train, test, gen, sigma, batch_size=500):
 import numpy as np
 from tqdm import tqdm
 
-def estimate_sigma(train, samples=1000):
+def estimate_sigma(train, samples=10000):
     """
     Sigma = sqrt(median(squared_distances) / 2)
     """
