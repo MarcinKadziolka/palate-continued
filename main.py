@@ -446,7 +446,7 @@ def main():
 
 
         local_scores, sigma = compute_global_palate_fast_unnormalized(
-            train_representations, test_representations, gen_representations, sigma=1, batch_size=250
+            train_representations, test_representations, gen_representations, sigma=args.sigma, batch_size=250
         )
 
 

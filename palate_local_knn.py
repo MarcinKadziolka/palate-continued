@@ -145,6 +145,7 @@ def compute_global_palate_fast(train, test, gen, sigma=None, batch_size=500):
 
     return r_values, sigma
 
+'''
 def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_size=200):
 
     train = train.astype(np.float32)
@@ -172,4 +173,36 @@ def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_siz
 
         r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
 
-    return r_values
+    return r_values, sigma
+'''
+
+def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_size=200):
+
+    train = train.astype(np.float32)
+    test  = test.astype(np.float32)
+    gen   = gen.astype(np.float32)
+
+    if sigma is None:
+        sigma = estimate_sigma(train)
+
+    # Precompute norms
+    train_norm = np.sum(train**2, axis=1)   # (Nt,)
+    test_norm  = np.sum(test**2, axis=1)    # (Ns,)
+
+    N = len(gen)
+    r_values = np.zeros(N, dtype=np.float32)
+
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE (no norm)"):
+        batch = gen[i:i+batch_size]          # (B, D)
+        batch_norm = np.sum(batch**2, axis=1)[:, None]  # (B,1)
+
+        # squared distances without broadcasting D
+        d_tr = batch_norm + train_norm[None, :] - 2.0 * batch @ train.T
+        d_te = batch_norm + test_norm[None, :]  - 2.0 * batch @ test.T
+
+        p_tr = np.exp(-d_tr / (2*sigma**2)).mean(axis=1)
+        p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
+
+        r_values[i:i+batch_size] = p_tr / (p_tr + p_te + 1e-8)
+
+    return r_values, sigma
