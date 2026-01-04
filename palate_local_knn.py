@@ -176,17 +176,22 @@ def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_siz
     return r_values, sigma
 '''
 
-def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_size=200):
+def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=200):
 
     train = train.astype(np.float32)
     test  = test.astype(np.float32)
     gen   = gen.astype(np.float32)
+
+    train /= np.linalg.norm(train, axis=1, keepdims=True) + 1e-8
+    test /= np.linalg.norm(test, axis=1, keepdims=True) + 1e-8
+    gen /= np.linalg.norm(gen, axis=1, keepdims=True) + 1e-8
 
     if sigma is None:
         sigma = estimate_sigma(train)
 
     # Precompute norms
     train_norm = np.sum(train**2, axis=1)   # (Nt,)
+    print(train_norm, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
     test_norm  = np.sum(test**2, axis=1)    # (Ns,)
 
     N = len(gen)
