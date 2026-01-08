@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from palate_local_knn import compute_local_palate_knn
 from palate_local_knn import compute_global_palate_fast
-from palate_local_knn import compute_global_palate_fast_unnormalized
+from palate_local_knn import compute_global_palate_fast_normalized
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -110,6 +110,12 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--load_npz",
+    action="store_true",
+    help="Run in image-free mode. Paths must be .npz files containing representations."
+)
+
+parser.add_argument(
     "--depth",
     type=int,
     default=0,
@@ -195,11 +201,12 @@ def write_to_txt(
     nsample: int,
     sigma,
 ):
+    model_arch = model.arch_str if model is not None else "npz"
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
     with open(out_path, "a") as f:
-        f.write(f"Model: {model.arch_str}\n")
+        f.write(f"Model: {model_arch}\n")
         f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n")
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
@@ -219,12 +226,14 @@ def write_to_csv(
     csv_file = os.path.join(output_dir, "metrics_summary.csv")
     file_exists = os.path.isfile(csv_file)
 
+    model_arch = model.arch_str if model is not None else "npz"
+
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
             writer.writerow(header)
-        row = [model.arch_str, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
+        row = [model_arch, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
         writer.writerow(row)
 
 
@@ -364,13 +373,27 @@ def load_reps_from_path(
     else:
         return None
 
+def load_reps_from_npz(path: str) -> np.ndarray:
+    if not path.endswith(".npz"):
+        raise ValueError(f"Expected .npz file, got: {path}")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Representation file not found: {path}")
+
+    data = np.load(path)
+    if "reps" not in data:
+        raise KeyError(f"'reps' key not found in {path}")
+
+    logger.info(f"Loaded representations from NPZ: {path}")
+    return data["reps"]
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
 
     dataset_name = get_last_x_dirs(path)
+    model_arch = model.arch_str if model is not None else "npz"
 
-    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{nsample}.npz")
+    return os.path.join(output_dir, f"{model_arch}_{dataset_name}_{nsample}.npz")
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
@@ -397,26 +420,94 @@ def main():
     logger.info("Starting main function.")
     args: Namespace = parser.parse_args()
     logger.info(f"Arguments: {args}")
-    device, num_workers = get_device_and_num_workers(args.device, args.num_workers)
+
+    # Sanity check
     if len(args.path) < 3:
-        logger.error(
-            "At least three paths are required: train, test, and one or more generated."
+        raise ValueError(
+            "At least three inputs are required: train, test, and one or more generated."
         )
-        return
+
+    # =============================
+    # NPZ (IMAGE-FREE) MODE
+    # =============================
+    if args.load_npz:
+        train_id = args.path[0]
+        test_id = args.path[1]
+        gen_ids = args.path[2:]
+
+        logger.info("Running in NPZ-only (image-free) mode")
+
+        train_representations = load_reps_from_npz(train_id)
+        test_representations = load_reps_from_npz(test_id)
+
+        logger.info(f"Train reps shape: {train_representations.shape}")
+        logger.info(f"Test reps shape: {test_representations.shape}")
+
+        model = None  # no model in NPZ mode
+
+        # experiment directory
+        exp_dir = args.exp_dir or create_unique_exp_dir()
+        output_experiment_dir = os.path.join(args.output_dir, exp_dir)
+        logger.info(f"Experiment directory: {output_experiment_dir}")
+        write_arguments(args, output_experiment_dir)
+
+        for gen_id in gen_ids:
+            gen_representations = load_reps_from_npz(gen_id)
+            logger.info(f"Gen reps ({gen_id}) shape: {gen_representations.shape}")
+
+            palate_components: PalateComponents = compute_palate(
+                train_representations=train_representations,
+                test_representations=test_representations,
+                gen_representations=gen_representations,
+                sigma=args.sigma,
+            )
+
+            local_scores, sigma_est = compute_global_palate_fast_normalized(
+                train_representations,
+                test_representations,
+                gen_representations,
+                sigma=args.sigma,
+                batch_size=250,
+            )
+
+            local_summary = {
+                "local_palate_mean": float(local_scores.mean()),
+                "local_palate_median": float(np.median(local_scores)),
+                "local_palate_std": float(local_scores.std()),
+                "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
+                "estimated sigma": float(sigma_est),
+            }
+
+            save_score(
+                palate_components=palate_components,
+                output_dir=output_experiment_dir,
+                model=model,              # None → handled inside save_score
+                train_path=train_id,
+                test_path=test_id,
+                gen_path=gen_id,
+                nsample=train_representations.shape[0],
+                sigma=args.sigma,
+                extra_scores=local_summary,
+            )
+
+        return  # IMPORTANT: stop here
+
+    # =============================
+    # IMAGE MODE
+    # =============================
+    device, num_workers = get_device_and_num_workers(args.device, args.num_workers)
 
     train_path = args.path[0]
     test_path = args.path[1]
     gen_paths = args.path[2:]
+
     logger.info(f"Training path: {train_path}")
     logger.info(f"Testing path: {test_path}")
     logger.info(f"Gen paths: {gen_paths}")
 
     model: DinoEncoder = get_model(args, device, args.dino_ckpt)
 
-    if args.exp_dir:
-        exp_dir = args.exp_dir
-    else:
-        exp_dir = create_unique_exp_dir()
+    exp_dir = args.exp_dir or create_unique_exp_dir()
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
@@ -430,9 +521,8 @@ def main():
         test_path, model, num_workers, device, args
     )
     logger.info("Finished loading/computing test representations")
-    logger.info(f"Enumerating paths to generated samples: {gen_paths}")
-    for gen_path in gen_paths:
 
+    for gen_path in gen_paths:
         gen_representations = compute_representations(
             gen_path, model, num_workers, device, args
         )
@@ -444,33 +534,33 @@ def main():
             sigma=args.sigma,
         )
 
-
-        local_scores, sigma = compute_global_palate_fast_normalized(
-            train_representations, test_representations, gen_representations, sigma=args.sigma, batch_size=250
+        local_scores, sigma_est = compute_global_palate_fast_normalized(
+            train_representations,
+            test_representations,
+            gen_representations,
+            sigma=args.sigma,
+            batch_size=250,
         )
-
 
         local_summary = {
             "local_palate_mean": float(local_scores.mean()),
             "local_palate_median": float(np.median(local_scores)),
             "local_palate_std": float(local_scores.std()),
             "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
-            "estimated sigma": float(sigma),
+            "estimated sigma": float(sigma_est),
         }
 
         save_score(
-            palate_components,
-            output_experiment_dir
-            ,
-            model,
-            train_path,
-            test_path,
-            gen_path,
-            args.nsample,
-            args.sigma,
-            extra_scores=local_summary,  # ← plugs straight in
+            palate_components=palate_components,
+            output_dir=output_experiment_dir,
+            model=model,
+            train_path=train_path,
+            test_path=test_path,
+            gen_path=gen_path,
+            nsample=args.nsample,
+            sigma=args.sigma,
+            extra_scores=local_summary,
         )
-
 
 if __name__ == "__main__":
     main()
