@@ -477,6 +477,7 @@ def main():
                 "local_palate_frac_gt_0.5_new": float((p_trs > p_tes).mean()),
                 "local_palate_frac_equal_new": float((p_trs == p_tes).mean()),
                 "local_palate_frac_gt_0.5_old": float((local_scores > 0.5).mean()),
+                "local_palate_frac_equal_old": float((local_scores == 0.5).mean()),
                 "estimated sigma": float(sigma_est),
             }
 
