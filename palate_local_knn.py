@@ -196,8 +196,8 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
 
     N = len(gen)
     r_values = np.zeros(N, dtype=np.float32)
-    p_trs = np.zeros(N, dtype=np.float32)
-    p_tes = np.zeros(N, dtype=np.float32)
+    log_p_trs = np.zeros(N, dtype=np.float32)
+    log_p_tes = np.zeros(N, dtype=np.float32)
 
     for i in tqdm(range(0, N, batch_size), desc="Global PALATE (log)"):
         batch = gen[i:i + batch_size]
@@ -210,7 +210,7 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
         log_p_te = logsumexp(-d_te / (2 * sigma ** 2), axis=1) - np.log(len(test))
 
         r_values[i:i + batch_size] = 1.0 / (1.0 + np.exp(log_p_te - log_p_tr))
-        p_trs[i:i + batch_size] = np.exp(log_p_tr)
-        p_tes[i:i + batch_size] = np.exp(log_p_te)
+        log_p_trs[i:i + batch_size] = log_p_tr
+        log_p_tes[i:i + batch_size] = log_p_te
 
-    return p_trs, p_tes, r_values, sigma
+    return log_p_trs, log_p_tes, r_values, sigma
