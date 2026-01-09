@@ -176,6 +176,8 @@ def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_siz
     return r_values, sigma
 '''
 
+from scipy.special import logsumexp
+
 def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=200):
 
     train = train.astype(np.float32)
@@ -197,19 +199,18 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
     p_trs = np.zeros(N, dtype=np.float32)
     p_tes = np.zeros(N, dtype=np.float32)
 
-
-    for i in tqdm(range(0, N, batch_size), desc="Global PALATE (no norm)"):
-        batch = gen[i:i+batch_size]
-        batch_norm = np.sum(batch**2, axis=1)[:, None]
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE (log)"):
+        batch = gen[i:i + batch_size]
+        batch_norm = np.sum(batch ** 2, axis=1)[:, None]
 
         d_tr = batch_norm + train_norm[None, :] - 2.0 * batch @ train.T
-        d_te = batch_norm + test_norm[None, :]  - 2.0 * batch @ test.T
+        d_te = batch_norm + test_norm[None, :] - 2.0 * batch @ test.T
 
-        p_tr = np.exp(-d_tr / (2*sigma**2)).mean(axis=1)
-        p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
+        log_p_tr = logsumexp(-d_tr / (2 * sigma ** 2), axis=1) - np.log(len(train))
+        log_p_te = logsumexp(-d_te / (2 * sigma ** 2), axis=1) - np.log(len(test))
 
-        r_values[i:i+batch_size] = p_tr / (p_tr + p_te)
-        p_trs[i:i + batch_size] = p_tr
-        p_tes[i:i + batch_size] = p_te
+        r_values[i:i + batch_size] = 1.0 / (1.0 + np.exp(log_p_te - log_p_tr))
+        p_trs[i:i + batch_size] = np.exp(log_p_tr)
+        p_tes[i:i + batch_size] = np.exp(log_p_te)
 
     return p_trs, p_tes, r_values, sigma
