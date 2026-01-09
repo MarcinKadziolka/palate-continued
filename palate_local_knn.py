@@ -182,9 +182,9 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
     test  = test.astype(np.float32)
     gen   = gen.astype(np.float32)
 
-    train /= np.linalg.norm(train, axis=1, keepdims=True)
-    test /= np.linalg.norm(test, axis=1, keepdims=True)
-    gen /= np.linalg.norm(gen, axis=1, keepdims=True)
+    #train /= np.linalg.norm(train, axis=1, keepdims=True)
+    #test /= np.linalg.norm(test, axis=1, keepdims=True)
+    #gen /= np.linalg.norm(gen, axis=1, keepdims=True)
 
     if sigma is None:
         sigma = estimate_sigma(train)
@@ -194,6 +194,9 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
 
     N = len(gen)
     r_values = np.zeros(N, dtype=np.float32)
+    p_trs = np.zeros(N, dtype=np.float32)
+    p_tes = np.zeros(N, dtype=np.float32)
+
 
     for i in tqdm(range(0, N, batch_size), desc="Global PALATE (no norm)"):
         batch = gen[i:i+batch_size]
@@ -206,5 +209,7 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
         p_te = np.exp(-d_te / (2*sigma**2)).mean(axis=1)
 
         r_values[i:i+batch_size] = p_tr / (p_tr + p_te)
+        p_trs[i:i + batch_size] = p_tr
+        p_tes[i:i + batch_size] = p_te
 
-    return r_values, sigma
+    return p_trs, p_tes, r_values, sigma

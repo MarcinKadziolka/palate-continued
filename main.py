@@ -462,7 +462,7 @@ def main():
                 sigma=args.sigma,
             )
 
-            local_scores, sigma_est = compute_global_palate_fast_normalized(
+            p_trs, p_tes, local_scores, sigma_est = compute_global_palate_fast_normalized(
                 train_representations,
                 test_representations,
                 gen_representations,
@@ -474,7 +474,9 @@ def main():
                 "local_palate_mean": float(local_scores.mean()),
                 "local_palate_median": float(np.median(local_scores)),
                 "local_palate_std": float(local_scores.std()),
-                "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
+                "local_palate_frac_gt_0.5_new": float((p_trs > p_tes).mean()),
+                "local_palate_frac_equal_new": float((p_trs == p_tes).mean()),
+                "local_palate_frac_gt_0.5_old": float((local_scores > 0.5).mean()),
                 "estimated sigma": float(sigma_est),
             }
 
