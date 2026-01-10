@@ -273,4 +273,4 @@ def compute_global_palate_fast_anisotropic(
         log_p_trs[i:i + batch_size] = log_p_tr
         log_p_tes[i:i + batch_size] = log_p_te
 
-    return log_p_trs, log_p_tes, r_values, sigma_tr, sigma_te
+    return log_p_trs, log_p_tes, r_values, sigma
