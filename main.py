@@ -417,6 +417,25 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
             f.write(f"{arg}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
 
+def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
+    inv_sigma2 = 1.0 / (sigma ** 2)
+    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
+
+    out = np.empty(len(query), dtype=np.float32)
+
+    for i in range(0, len(query), batch_size):
+        q = query[i:i + batch_size]
+
+        q_norm = np.sum(q ** 2 * inv_sigma2, axis=1)[:, None]
+        cross = (q * inv_sigma2) @ data.T
+        d = q_norm + data_norm[None, :] - 2.0 * cross
+
+        out[i:i + batch_size] = (
+            logsumexp(-0.5 * d, axis=1) - np.log(len(data))
+        )
+
+    return out
+
 def log_kde_anisotropic(query, data, sigma):
     inv_sigma2 = 1.0 / (sigma ** 2)
 
@@ -437,7 +456,7 @@ def compute_global_kde_threshold(train, test, percentile=5.0):
 
     sigma_D = np.std(D, axis=0).astype(np.float32)
 
-    logp_D = log_kde_anisotropic(D, D, sigma_D)
+    logp_D = log_kde_anisotropic_batched(D, D, sigma_D, batch_size=500)
 
     k = int(len(logp_D) * percentile / 100.0)
     idx = np.argpartition(logp_D, k)[:k]
@@ -446,7 +465,7 @@ def compute_global_kde_threshold(train, test, percentile=5.0):
     return tau, sigma_D
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
-    logp_gen = log_kde_anisotropic(gen, D, sigma_D)
+    logp_gen = log_kde_anisotropic_batched(gen, D, sigma_D, batch_size=500)
 
     mask_keep = logp_gen >= tau
     mask_low  = ~mask_keep
