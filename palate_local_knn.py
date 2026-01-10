@@ -102,6 +102,7 @@ def estimate_sigma(train, samples=10000):
     dist2 = dist2[dist2 > 1e-8]               # remove diagonal self-distances
 
     median_dist2 = np.median(dist2)           # median of squared distances
+    print(median_dist2, "mediannnnnnnnnNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNvvNn")
     sigma = np.sqrt(median_dist2 / 2)         # ← correct formula
 
     return sigma
@@ -178,6 +179,11 @@ def compute_global_palate_fast_unnormalized(train, test, gen, sigma=1, batch_siz
 
 from scipy.special import logsumexp
 
+def estimate_sigma_vector(x):
+    # x: (N, D)
+    return np.std(x, axis=0)
+
+
 def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=200):
 
     train = train.astype(np.float32)
@@ -188,8 +194,9 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
     #test /= np.linalg.norm(test, axis=1, keepdims=True)
     #gen /= np.linalg.norm(gen, axis=1, keepdims=True)
 
-    if sigma is None:
-        sigma = estimate_sigma(train)
+    #if sigma is None:
+    sigma = estimate_sigma(test)
+    print(sigma, "SSSSSSS")
 
     train_norm = np.sum(train**2, axis=1)
     test_norm  = np.sum(test**2, axis=1)
@@ -214,3 +221,56 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
         log_p_tes[i:i + batch_size] = log_p_te
 
     return log_p_trs, log_p_tes, r_values, sigma
+
+import numpy as np
+from scipy.special import logsumexp
+from tqdm import tqdm
+
+def compute_global_palate_fast_anisotropic(
+    train,
+    test,
+    gen,
+    sigma=None,          # ignored as a value; std is always used
+    batch_size=200
+):
+    train = train.astype(np.float32)
+    test  = test.astype(np.float32)
+    gen   = gen.astype(np.float32)
+
+    # --- ALWAYS compute per-dimension std ---
+    sigma_tr = np.std(train, axis=0).astype(np.float32)   # (D,)
+    sigma_te = np.std(test,  axis=0).astype(np.float32)   # (D,)
+
+    inv_sigma2_tr = 1.0 / (sigma_tr ** 2)
+    inv_sigma2_te = 1.0 / (sigma_te ** 2)
+
+    # --- weighted norms ---
+    train_norm = np.sum(train ** 2 * inv_sigma2_tr, axis=1)
+    test_norm  = np.sum(test  ** 2 * inv_sigma2_te, axis=1)
+
+    N = len(gen)
+    r_values  = np.zeros(N, dtype=np.float32)
+    log_p_trs = np.zeros(N, dtype=np.float32)
+    log_p_tes = np.zeros(N, dtype=np.float32)
+
+    for i in tqdm(range(0, N, batch_size), desc="Global PALATE (log)"):
+        batch = gen[i:i + batch_size]
+
+        # --- train side ---
+        batch_norm_tr = np.sum(batch ** 2 * inv_sigma2_tr, axis=1)[:, None]
+        cross_tr = (batch * inv_sigma2_tr) @ train.T
+        d_tr = batch_norm_tr + train_norm[None, :] - 2.0 * cross_tr
+
+        # --- test side ---
+        batch_norm_te = np.sum(batch ** 2 * inv_sigma2_te, axis=1)[:, None]
+        cross_te = (batch * inv_sigma2_te) @ test.T
+        d_te = batch_norm_te + test_norm[None, :] - 2.0 * cross_te
+
+        log_p_tr = logsumexp(-0.5 * d_tr, axis=1) - np.log(len(train))
+        log_p_te = logsumexp(-0.5 * d_te, axis=1) - np.log(len(test))
+
+        r_values[i:i + batch_size] = 1.0 / (1.0 + np.exp(log_p_te - log_p_tr))
+        log_p_trs[i:i + batch_size] = log_p_tr
+        log_p_tes[i:i + batch_size] = log_p_te
+
+    return log_p_trs, log_p_tes, r_values, sigma_tr, sigma_te
