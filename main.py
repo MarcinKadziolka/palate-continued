@@ -447,7 +447,7 @@ def log_kde_anisotropic(query, data, sigma):
 
     return logsumexp(-0.5 * d, axis=1) - np.log(len(data))
 
-def compute_global_kde_threshold(train, test, percentile=5.0):
+def compute_global_kde_threshold(train, test, percentile=0.001):
     """
     KDE₁ on real data only (train + test)
     Returns: tau, sigma_D
@@ -516,7 +516,7 @@ def main():
             tau, sigma_D = compute_global_kde_threshold(
                 train_representations,
                 test_representations,
-                percentile=5.0
+                percentile=0.001
             )
 
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
