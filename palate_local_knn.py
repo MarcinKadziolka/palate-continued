@@ -102,7 +102,6 @@ def estimate_sigma(train, samples=10000):
     dist2 = dist2[dist2 > 1e-8]               # remove diagonal self-distances
 
     median_dist2 = np.median(dist2)           # median of squared distances
-    print(median_dist2, "mediannnnnnnnnNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNvvNn")
     sigma = np.sqrt(median_dist2 / 2)         # ← correct formula
 
     return sigma
@@ -194,9 +193,8 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
     #test /= np.linalg.norm(test, axis=1, keepdims=True)
     #gen /= np.linalg.norm(gen, axis=1, keepdims=True)
 
-    #if sigma is None:
-    sigma = estimate_sigma(test)
-    print(sigma, "SSSSSSS")
+    if sigma is None:
+        sigma = estimate_sigma(test)
 
     train_norm = np.sum(train**2, axis=1)
     test_norm  = np.sum(test**2, axis=1)
@@ -225,6 +223,42 @@ def compute_global_palate_fast_normalized(train, test, gen, sigma=1, batch_size=
 import numpy as np
 from scipy.special import logsumexp
 from tqdm import tqdm
+
+def log_kde_anisotropic(query, data, sigma):
+    """
+    query: (B, D)
+    data:  (N, D)
+    sigma: (D,)
+    """
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
+    query_norm = np.sum(query ** 2 * inv_sigma2, axis=1)[:, None]
+
+    cross = (query * inv_sigma2) @ data.T
+    d = query_norm + data_norm[None, :] - 2.0 * cross
+
+    return logsumexp(-0.5 * d, axis=1) - np.log(len(data))
+
+def estimate_likelihood_threshold(data, percentile=5.0):
+    sigma_D = np.std(data, axis=0).astype(np.float32)
+
+    logp = log_kde_anisotropic(data, data, sigma_D)
+
+    k = int(len(logp) * percentile / 100.0)
+    idx = np.argpartition(logp, k)[:k]   # lowest k
+    threshold = logp[idx].max()
+
+    return threshold, sigma_D
+
+def filter_generated_by_global_kde(gen, data, sigma_D, threshold):
+    logp_gen = log_kde_anisotropic(gen, data, sigma_D)
+
+    mask_keep = logp_gen >= threshold
+    mask_low  = ~mask_keep
+
+    return mask_keep, mask_low, logp_gen
+
 
 def compute_global_palate_fast_anisotropic(
     train,

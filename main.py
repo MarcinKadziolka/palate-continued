@@ -8,6 +8,7 @@ import pathlib
 import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
+from scipy.special import logsumexp
 
 from jaxlib.xla_client import Array
 import numpy as np
@@ -416,6 +417,41 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
             f.write(f"{arg}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
 
+def log_kde_anisotropic(query, data, sigma):
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
+    query_norm = np.sum(query ** 2 * inv_sigma2, axis=1)[:, None]
+
+    cross = (query * inv_sigma2) @ data.T
+    d = query_norm + data_norm[None, :] - 2.0 * cross
+
+    return logsumexp(-0.5 * d, axis=1) - np.log(len(data))
+
+def compute_global_kde_threshold(train, test, percentile=5.0):
+    """
+    KDE₁ on real data only (train + test)
+    Returns: tau, sigma_D
+    """
+    D = np.vstack([train, test]).astype(np.float32)
+
+    sigma_D = np.std(D, axis=0).astype(np.float32)
+
+    logp_D = log_kde_anisotropic(D, D, sigma_D)
+
+    k = int(len(logp_D) * percentile / 100.0)
+    idx = np.argpartition(logp_D, k)[:k]
+
+    tau = logp_D[idx].max()
+    return tau, sigma_D
+
+def filter_gen_by_global_kde(gen, D, sigma_D, tau):
+    logp_gen = log_kde_anisotropic(gen, D, sigma_D)
+
+    mask_keep = logp_gen >= tau
+    mask_low  = ~mask_keep
+
+    return mask_keep, mask_low, logp_gen
 
 def main():
     logger.info("Starting main function.")
@@ -454,6 +490,29 @@ def main():
 
         for gen_id in gen_ids:
             gen_representations = load_reps_from_npz(gen_id)
+
+            # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
+            D = np.vstack([train_representations, test_representations])
+
+            tau, sigma_D = compute_global_kde_threshold(
+                train_representations,
+                test_representations,
+                percentile=5.0
+            )
+
+            mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
+                gen_representations,
+                D,
+                sigma_D,
+                tau
+            )
+
+            gen_filt = gen_representations[mask_keep]
+
+            lp = np.sum(mask_low)
+            n = len(gen_representations)
+            scale = lp / n
+
             logger.info(f"Gen reps ({gen_id}) shape: {gen_representations.shape}")
 
             palate_components: PalateComponents = compute_palate(
@@ -466,7 +525,7 @@ def main():
             log_p_trs, log_p_tes, local_scores, sigma_est = compute_global_palate_fast_anisotropic(
                 train_representations,
                 test_representations,
-                gen_representations,
+                gen_filt,
                 sigma=args.sigma,
                 batch_size=250,
             )
@@ -481,6 +540,13 @@ def main():
                 "local_palate_frac_equal_old": float((local_scores == 0.5).mean()),
                 "estimated sigma": float(sigma_est),
             }
+            m_palate = 0.5 * float(scale) + 0.5 * float((log_p_trs > log_p_tes).mean())
+            extra_scores = {
+                "global_kde_threshold_tau": float(tau),
+                "gen_low_likelihood_frac": float(scale),
+                "m_palate": float(m_palate),
+            }
+            local_summary.update(extra_scores)
 
             save_score(
                 palate_components=palate_components,
