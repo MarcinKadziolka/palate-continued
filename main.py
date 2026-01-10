@@ -559,11 +559,11 @@ def main():
                 "local_palate_frac_equal_old": float((local_scores == 0.5).mean()),
                 "estimated sigma": float(sigma_est),
             }
-            m_palate = 0.5 * float(scale) + 0.5 * float((log_p_trs > log_p_tes).mean())
+            m_palate_kde = 0.5 * float(scale) + 0.5 * float((log_p_trs > log_p_tes).mean())
             extra_scores = {
                 "global_kde_threshold_tau": float(tau),
                 "gen_low_likelihood_frac": float(scale),
-                "m_palate": float(m_palate),
+                "m_palate_kde": float(m_palate_kde),
             }
             local_summary.update(extra_scores)
 
