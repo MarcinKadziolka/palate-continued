@@ -458,10 +458,12 @@ def compute_global_kde_threshold(train, test, percentile=0.001):
 
     logp_D = log_kde_anisotropic_batched(D, D, sigma_D, batch_size=500)
 
-    k = int(len(logp_D) * percentile / 100.0)
-    idx = np.argpartition(logp_D, k)[:k]
+    #k = int(len(logp_D) * percentile / 100.0)
+    #idx = np.argpartition(logp_D, k)[:k]
 
-    tau = logp_D[idx].max()
+    #tau = logp_D[idx].max()
+    tau = logp_D.min()
+
     return tau, sigma_D
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
