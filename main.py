@@ -544,7 +544,7 @@ def main():
             scale = lp / n
 
             logger.info(
-                f"percentile={percentile}% | "
+                f"percentile={args.kde_percentile}% | "
                 f"tau={tau:.3f} | "
                 f"filtered={scale:.3f}"
             )
