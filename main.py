@@ -125,6 +125,15 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--kde_percentile",
+    type=float,
+    nargs="+",
+    default=5.0,
+    help="List of percentiles for global KDE threshold grid search (in %)."
+)
+
+
+parser.add_argument(
     "--repr_dir",
     type=str,
     default="./saved_representations",
@@ -518,21 +527,27 @@ def main():
             tau, sigma_D = compute_global_kde_threshold(
                 train_representations,
                 test_representations,
-                percentile=0.001
+                percentile=args.kde_percentile,
             )
 
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
                 gen_representations,
                 D,
                 sigma_D,
-                tau
+                tau,
             )
 
-            gen_filt = gen_representations[mask_keep]
+            #gen_filt = gen_representations[mask_keep]
 
             lp = np.sum(mask_low)
             n = len(gen_representations)
             scale = lp / n
+
+            logger.info(
+                f"percentile={percentile}% | "
+                f"tau={tau:.3f} | "
+                f"filtered={scale:.3f}"
+            )
 
             logger.info(f"Gen reps ({gen_id}) shape: {gen_representations.shape}")
 
@@ -546,7 +561,7 @@ def main():
             log_p_trs, log_p_tes, local_scores, sigma_est = compute_global_palate_fast_anisotropic(
                 train_representations,
                 test_representations,
-                gen_filt,
+                gen_representations,
                 sigma=args.sigma,
                 batch_size=250,
             )
