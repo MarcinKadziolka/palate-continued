@@ -91,6 +91,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--tau",
+    type=float,
+    default=-9.0,
+    help="Explicit global KDE log-density threshold. Overrides --kde_percentile."
+)
+
+parser.add_argument(
     "--exp_dir",
     type=str,
     default=None,
@@ -467,11 +474,11 @@ def compute_global_kde_threshold(train, test, percentile=0.001):
 
     logp_D = log_kde_anisotropic_batched(D, D, sigma_D, batch_size=500)
 
-    #k = int(len(logp_D) * percentile / 100.0)
-    #idx = np.argpartition(logp_D, k)[:k]
+    k = int(len(logp_D) * percentile / 100.0)
+    idx = np.argpartition(logp_D, k)[:k]
 
-    #tau = logp_D[idx].max()
-    tau = logp_D.min()
+    tau = logp_D[idx].max()
+    #tau = logp_D.min()
 
     return tau, sigma_D
 
@@ -523,12 +530,12 @@ def main():
 
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
             D = np.vstack([train_representations, test_representations])
+            sigma_D = np.std(D, axis=0).astype(np.float32)
 
-            tau, sigma_D = compute_global_kde_threshold(
-                train_representations,
-                test_representations,
-                percentile=args.kde_percentile,
-            )
+            # -------------------------
+            # SELECT TAU
+            # -------------------------
+            tau = float(args.tau)
 
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
                 gen_representations,
