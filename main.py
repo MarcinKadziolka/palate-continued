@@ -529,18 +529,13 @@ def main():
             gen_representations = load_reps_from_npz(gen_id)
 
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
-            D = np.vstack([train_representations, test_representations])
-            sigma_D = np.std(D, axis=0).astype(np.float32)
-
-            # -------------------------
-            # SELECT TAU
-            # -------------------------
-            tau = float(args.tau)
+            D_test = test_representations
+            sigma_test = np.std(D_test, axis=0).astype(np.float32)
 
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
                 gen_representations,
-                D,
-                sigma_D,
+                D_test,
+                sigma_test,
                 tau,
             )
 
