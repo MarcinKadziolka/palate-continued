@@ -24,6 +24,7 @@ from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
 from palate import compute_palate, PalateComponents, flatten_dataclass
 from representations import get_representations
+from dmmd import dmmd_blockwise
 
 logger = logging.getLogger(__name__)
 
@@ -529,36 +530,9 @@ def main():
             gen_representations = load_reps_from_npz(gen_id)
 
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
-            #D = np.vstack([train_representations, test_representations])
-            D = test_representations
+            D = np.vstack([train_representations, test_representations])
             sigma_D = np.std(D, axis=0).astype(np.float32)
-
-            # -------------------------
-            # SELECT TAU
-            # -------------------------
             tau = float(args.tau)
-            '''
-            mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
-                gen_representations,
-                D,
-                sigma_D,
-                tau,
-            )
-
-            #gen_filt = gen_representations[mask_keep]
-
-            lp = np.sum(mask_low)
-            n = len(gen_representations)
-            scale = lp / n
-
-            logger.info(
-                f"percentile={args.kde_percentile}% | "
-                f"tau={tau:.3f} | "
-                f"filtered={scale:.3f}"
-            )
-
-            logger.info(f"Gen reps ({gen_id}) shape: {gen_representations.shape}")
-            '''
 
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
                 gen_representations,
@@ -568,52 +542,60 @@ def main():
             )
 
             # ---- FILTER GEN REPRESENTATIONS ----
-            gen_representations_filt = gen_representations[mask_keep]
-
-            lp = np.sum(mask_low)
-            n = len(gen_representations)
-            scale = lp / n
-
-            # ---- SAFETY CHECK ----
-            if len(gen_representations_filt) == 0:
-                logger.warning(f"All gen samples filtered out for {gen_id}, skipping.")
+            gen_gt = gen_representations[mask_keep]
+            gen_lt = gen_representations[mask_low]
+            if len(gen_gt) == 0 or len(gen_lt) == 0:
+                logger.warning(f"Skipping {gen_id}: empty gen_gt or gen_lt")
                 continue
 
-            palate_components: PalateComponents = compute_palate(
+            f_gt = len(gen_gt) / len(gen_representations)
+            f_lt = len(gen_lt) / len(gen_representations)
+
+            pal_gt = compute_palate(
                 train_representations=train_representations,
                 test_representations=test_representations,
-                gen_representations=gen_representations,
+                gen_representations=gen_gt,
+                sigma=args.sigma,
+            )
+            dmmd_lt, _ = dmmd_blockwise(
+                x=gen_lt,
+                y=D,
+                sigma=args.sigma,
+            )
+            dmmd_gt, _ = dmmd_blockwise(
+                x=gen_gt,
+                y=D,
                 sigma=args.sigma,
             )
 
-            log_p_trs, log_p_tes, local_scores, sigma_est = compute_global_palate_fast_anisotropic(
-                train_representations,
-                test_representations,
-                gen_representations_filt,
-                sigma=args.sigma,
-                batch_size=250,
-            )
+            numerator = dmmd_lt * f_lt
+            denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
 
-            local_summary = {
-                "local_palate_mean": float(local_scores.mean()),
-                "local_palate_median": float(np.median(local_scores)),
-                "local_palate_std": float(local_scores.std()),
-                "local_palate_frac_gt_0.5_new": float((log_p_trs > log_p_tes).mean()),
-                "local_palate_frac_equal_new": float((log_p_trs == log_p_tes).mean()),
-                "local_palate_frac_gt_0.5_old": float((local_scores > 0.5).mean()),
-                "local_palate_frac_equal_old": float((local_scores == 0.5).mean()),
-                "estimated sigma": float(sigma_est),
-            }
-            m_palate_kde = 0.5 * float(scale) + 0.5 * float((log_p_trs > log_p_tes).mean())
+            S_dmmd = numerator / denominator if denominator > 0 else 0.0
+            S_palate = pal_gt.palate_metrics.palate
+
+
+            m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+            # ----- Save -----
             extra_scores = {
-                "global_kde_threshold_tau": float(tau),
-                "gen_low_likelihood_frac": float(scale),
-                "m_palate_kde": float(m_palate_kde),
+                "m_palate": float(m_palate),
+
+                # --- DMMD terms ---
+                "dmmd_gen_lt_data": float(dmmd_lt),
+                "dmmd_gen_gt_data": float(dmmd_gt),
+                "dmmd_weighted": float(S_dmmd),
+
+                # --- KDE stats ---
+                "gen_low_frac": float(f_lt),
+                "gen_high_frac": float(f_gt),
+                "tau": float(tau),
+
+                # --- Local PALATE ---
+                "palate_local": float(S_palate),
             }
-            local_summary.update(extra_scores)
 
             save_score(
-                palate_components=palate_components,
+                palate_components=pal_gt,
                 output_dir=output_experiment_dir,
                 model=model,              # None → handled inside save_score
                 train_path=train_id,
@@ -621,7 +603,7 @@ def main():
                 gen_path=gen_id,
                 nsample=train_representations.shape[0],
                 sigma=args.sigma,
-                extra_scores=local_summary,
+                extra_scores=extra_scores,
             )
 
         return  # IMPORTANT: stop here
