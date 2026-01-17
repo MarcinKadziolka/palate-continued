@@ -101,5 +101,5 @@ def dmmd_blockwise_general(x, y, sigma, block_size=100):
     kyy = kernel_mean(y, y)
     kxy = kernel_mean(x, y)
 
-    return kxx + kyy - 2 * kxy
+    return kxx + kyy - 2 * kxy, kxx + kyy
 
