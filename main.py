@@ -24,7 +24,7 @@ from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
 from palate import compute_palate, PalateComponents, flatten_dataclass
 from representations import get_representations
-from dmmd import dmmd_blockwise
+from dmmd import dmmd_blockwise_general
 
 logger = logging.getLogger(__name__)
 
@@ -557,12 +557,12 @@ def main():
                 gen_representations=gen_gt,
                 sigma=args.sigma,
             )
-            dmmd_lt, _ = dmmd_blockwise(
+            dmmd_lt, _ = dmmd_blockwise_general(
                 x=gen_lt,
                 y=D,
                 sigma=args.sigma,
             )
-            dmmd_gt, _ = dmmd_blockwise(
+            dmmd_gt, _ = dmmd_blockwise_general(
                 x=gen_gt,
                 y=D,
                 sigma=args.sigma,

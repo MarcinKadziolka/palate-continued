@@ -76,3 +76,30 @@ def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Arra
     mean_kyy = blockwise_kernel_mean(y, y, sigma)
 
     return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
+
+def dmmd_blockwise_general(x, y, sigma, block_size=100):
+    def kernel_mean(a, b):
+        total = 0.0
+        count = 0
+
+        for i in range(0, len(a), block_size):
+            a_block = a[i:i+block_size]
+            for j in range(0, len(b), block_size):
+                b_block = b[j:j+block_size]
+
+                sq = (
+                    np.sum(a_block**2, axis=1)[:, None]
+                    + np.sum(b_block**2, axis=1)[None, :]
+                    - 2 * a_block @ b_block.T
+                )
+                total += np.exp(-sq / (2 * sigma**2)).sum()
+                count += a_block.shape[0] * b_block.shape[0]
+
+        return total / count
+
+    kxx = kernel_mean(x, x)
+    kyy = kernel_mean(y, y)
+    kxy = kernel_mean(x, y)
+
+    return kxx + kyy - 2 * kxy
+
