@@ -529,13 +529,18 @@ def main():
             gen_representations = load_reps_from_npz(gen_id)
 
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
-            D_test = test_representations
-            sigma_test = np.std(D_test, axis=0).astype(np.float32)
+            D = np.vstack([train_representations, test_representations])
+            sigma_D = np.std(D, axis=0).astype(np.float32)
 
+            # -------------------------
+            # SELECT TAU
+            # -------------------------
+            tau = float(args.tau)
+            '''
             mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
                 gen_representations,
-                D_test,
-                sigma_test,
+                D,
+                sigma_D,
                 tau,
             )
 
@@ -552,6 +557,26 @@ def main():
             )
 
             logger.info(f"Gen reps ({gen_id}) shape: {gen_representations.shape}")
+            '''
+
+            mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
+                gen_representations,
+                D,
+                sigma_D,
+                tau,
+            )
+
+            # ---- FILTER GEN REPRESENTATIONS ----
+            gen_representations_filt = gen_representations[mask_keep]
+
+            lp = np.sum(mask_low)
+            n = len(gen_representations)
+            scale = lp / n
+
+            # ---- SAFETY CHECK ----
+            if len(gen_representations_filt) == 0:
+                logger.warning(f"All gen samples filtered out for {gen_id}, skipping.")
+                continue
 
             palate_components: PalateComponents = compute_palate(
                 train_representations=train_representations,
@@ -563,7 +588,7 @@ def main():
             log_p_trs, log_p_tes, local_scores, sigma_est = compute_global_palate_fast_anisotropic(
                 train_representations,
                 test_representations,
-                gen_representations,
+                gen_representations_filt,
                 sigma=args.sigma,
                 batch_size=250,
             )
