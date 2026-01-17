@@ -529,7 +529,8 @@ def main():
             gen_representations = load_reps_from_npz(gen_id)
 
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
-            D = np.vstack([train_representations, test_representations])
+            #D = np.vstack([train_representations, test_representations])
+            D = test_representations
             sigma_D = np.std(D, axis=0).astype(np.float32)
 
             # -------------------------
