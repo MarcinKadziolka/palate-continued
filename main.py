@@ -560,14 +560,14 @@ def main():
             m = len(gen_representations)
 
             # DMMD(G<, DATA)
-            dmmd_lt = dmmd_blockwise_jax(
+            dmmd_lt, _ = dmmd_blockwise_jax(
                 x=gen_lt,
                 y=D,
                 sigma=args.sigma,
             )
 
             # DMMD(G>, TEST)
-            dmmd_gt = dmmd_blockwise_jax(
+            dmmd_gt, _ = dmmd_blockwise_jax(
                 x=gen_gt,
                 y=test_representations,
                 sigma=args.sigma,
