@@ -582,18 +582,13 @@ def main():
             extra_scores = {
                 "m_palate": float(m_palate),
 
-                # --- DMMD terms ---
                 "dmmd_gen_lt_data": float(dmmd_lt),
-                "dmmd_gen_gt_data": float(dmmd_gt),
-                "dmmd_weighted": float(S_dmmd),
+                "dmmd_gen_gt_test": float(dmmd_gt),
 
-                # --- KDE stats ---
-                "gen_low_frac": float(f_lt),
-                "gen_high_frac": float(f_gt),
+                "gen_low_frac": float(len(gen_lt) / m),
+                "gen_high_frac": float(len(gen_gt) / m),
+
                 "tau": float(tau),
-
-                # --- Local PALATE ---
-                "palate_local": float(S_palate),
             }
 
             save_score(
