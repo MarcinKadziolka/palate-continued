@@ -557,25 +557,27 @@ def main():
                 gen_representations=gen_gt,
                 sigma=args.sigma,
             )
-            dmmd_lt, _ = dmmd_blockwise_jax(
+            m = len(gen_representations)
+
+            # DMMD(G<, DATA)
+            dmmd_lt = dmmd_blockwise_jax(
                 x=gen_lt,
                 y=D,
                 sigma=args.sigma,
             )
-            dmmd_gt, _ = dmmd_blockwise_jax(
+
+            # DMMD(G>, TEST)
+            dmmd_gt = dmmd_blockwise_jax(
                 x=gen_gt,
-                y=D,
+                y=test_representations,
                 sigma=args.sigma,
             )
 
-            numerator = dmmd_lt * f_lt
-            denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
+            m_palate = (
+                    dmmd_lt * (len(gen_lt) / m)
+                    + 0.5 * dmmd_gt * (len(gen_gt) / m)
+            )
 
-            S_dmmd = numerator / denominator if denominator > 0 else 0.0
-            S_palate = pal_gt.palate_metrics.palate
-
-
-            m_palate = 0.5 * S_dmmd + 0.5 * S_palate
             # ----- Save -----
             extra_scores = {
                 "m_palate": float(m_palate),
