@@ -643,31 +643,81 @@ def main():
             gen_path, model, num_workers, device, args
         )
 
-        palate_components: PalateComponents = compute_palate(
+        # ==============================
+        # GLOBAL KDE (same as NPZ mode)
+        # ==============================
+        D = np.vstack([train_representations, test_representations])
+        sigma_D = np.std(D, axis=0).astype(np.float32)
+        tau = float(args.tau)
+
+        mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
+            gen_representations,
+            D,
+            sigma_D,
+            tau,
+        )
+
+        gen_gt = gen_representations[mask_keep]
+        gen_lt = gen_representations[mask_low]
+
+        if len(gen_gt) == 0 or len(gen_lt) == 0:
+            logger.warning(f"Skipping {gen_path}: empty gen_gt or gen_lt")
+            continue
+
+        f_gt = len(gen_gt) / len(gen_representations)
+        f_lt = len(gen_lt) / len(gen_representations)
+
+        # ==============================
+        # PALATE (GT only)
+        # ==============================
+        pal_gt = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
-            gen_representations=gen_representations,
+            gen_representations=gen_gt,
             sigma=args.sigma,
         )
 
-        local_scores, sigma_est = compute_global_palate_fast_normalized(
-            train_representations,
-            test_representations,
-            gen_representations,
+        # ==============================
+        # DMMD
+        # ==============================
+        dmmd_lt, _ = dmmd_blockwise_jax(
+            x=gen_lt,
+            y=D,
             sigma=args.sigma,
-            batch_size=250,
         )
 
-        local_summary = {
-            "local_palate_mean": float(local_scores.mean()),
-            "local_palate_median": float(np.median(local_scores)),
-            "local_palate_std": float(local_scores.std()),
-            "local_palate_frac_gt_0.5": float((local_scores > 0.5).mean()),
-            "estimated sigma": float(sigma_est),
+        dmmd_gt, _ = dmmd_blockwise_jax(
+            x=gen_gt,
+            y=D,
+            sigma=args.sigma,
+        )
+
+        numerator = dmmd_lt * f_lt
+        denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
+        S_dmmd = numerator / denominator if denominator > 0 else 0.0
+
+        # ==============================
+        # Final mPALATE
+        # ==============================
+        S_palate = pal_gt.palate_metrics.palate
+        m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+
+        # ==============================
+        # Save
+        # ==============================
+        extra_scores = {
+            "m_palate": float(m_palate),
+            "dmmd_gen_lt_data": float(dmmd_lt),
+            "dmmd_gen_gt_data": float(dmmd_gt),
+            "dmmd_weighted": float(S_dmmd),
+            "gen_low_frac": float(f_lt),
+            "gen_high_frac": float(f_gt),
+            "tau": float(tau),
+            "palate_local": float(S_palate),
         }
 
         save_score(
-            palate_components=palate_components,
+            palate_components=pal_gt,
             output_dir=output_experiment_dir,
             model=model,
             train_path=train_path,
@@ -675,7 +725,7 @@ def main():
             gen_path=gen_path,
             nsample=args.nsample,
             sigma=args.sigma,
-            extra_scores=local_summary,
+            extra_scores=extra_scores,
         )
 
 if __name__ == "__main__":
