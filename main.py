@@ -68,6 +68,12 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--load_npz",
+    action="store_true",
+    help="Run in image-free mode. Paths must be .npz files containing representations."
+)
+
+parser.add_argument(
     "--device", type=str, default=None, help="Device to use. Like cuda, cuda:0 or cpu"
 )
 
@@ -359,6 +365,19 @@ def load_reps_from_path(
     else:
         return None
 
+def load_reps_from_npz(path: str) -> np.ndarray:
+    if not path.endswith(".npz"):
+        raise ValueError(f"Expected .npz file, got: {path}")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Representation file not found: {path}")
+
+    data = np.load(path)
+    if "reps" not in data:
+        raise KeyError(f"'reps' key not found in {path}")
+
+    logger.info(f"Loaded representations from NPZ: {path}")
+    return data["reps"]
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
@@ -415,17 +434,23 @@ def main():
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
+    if args.load_npz:
+        logger.info("Loading representations from NPZ files")
 
-    train_representations = compute_representations(
-        train_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing train representations")
+        train_representations = load_reps_from_npz(train_path)
+        test_representations = load_reps_from_npz(test_path)
+    else:
+        
+        train_representations = compute_representations(
+            train_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing train representations")
 
-    test_representations = compute_representations(
-        test_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing test representations")
-    logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+        test_representations = compute_representations(
+            test_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing test representations")
+        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
 
         gen_representations = compute_representations(
