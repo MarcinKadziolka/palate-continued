@@ -546,7 +546,6 @@ def main():
             gen_lt = gen_representations[mask_low]
             if len(gen_gt) == 0 or len(gen_lt) == 0:
                 logger.warning(f"Skipping {gen_id}: empty gen_gt or gen_lt")
-                continue
 
             f_gt = len(gen_gt) / len(gen_representations)
             f_lt = len(gen_lt) / len(gen_representations)
