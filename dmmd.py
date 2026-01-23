@@ -114,25 +114,28 @@ def _rbf_block(x, y, sigma):
     return jnp.exp(-sq / (2 * sigma**2))
 
 
-def dmmd_blockwise_jax(x, y, sigma, block_size=_BLOCK_SIZE):
-    def kernel_mean(a, b):
-        total = 0.0
-        count = 0
+def kernel_mean(a, b, sigma, block_size):
+    total = 0.0
+    count = 0.0
 
-        for i in range(0, a.shape[0], block_size):
-            a_blk = a[i:i+block_size]
-            for j in range(0, b.shape[0], block_size):
-                b_blk = b[j:j+block_size]
+    for i in range(0, a.shape[0], block_size):
+        a_blk = a[i:i + block_size]
+        for j in range(0, b.shape[0], block_size):
+            b_blk = b[j:j + block_size]
 
-                k = _rbf_block(a_blk, b_blk, sigma)
-                total += jnp.sum(k)
-                count += k.size
+            k = _rbf_block(a_blk, b_blk, sigma)
 
-        return total / count
+            # leave JAX world here
+            total += float(jnp.sum(k))
+            count += k.size
 
-    kxx = kernel_mean(x, x)
-    kyy = kernel_mean(y, y)
-    kxy = kernel_mean(x, y)
+    return total / count
+
+
+def dmmd_blockwise_jax(x, y, sigma, block_size=1000):
+    kxx = kernel_mean(x, x, sigma, block_size)
+    kyy = kernel_mean(y, y, sigma, block_size)
+    kxy = kernel_mean(x, y, sigma, block_size)
 
     return kxx + kyy - 2 * kxy, kxx + kyy
 
