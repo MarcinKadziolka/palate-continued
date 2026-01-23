@@ -59,7 +59,7 @@ class CustomDataLoader:
         nsample: int = -1,
         transform=None,
         batch_size: int = 50,
-        num_workers: int = 1,
+        num_workers: int = 0,
         seed: int = 13579,
         random_sample: bool = True,
         sample_w_replacement: bool = False,
@@ -131,7 +131,7 @@ class CustomDataLoader:
         if not self.files:
             # Assume sub-folders for image classes
             class_dirs = sorted(
-                image_path.glob("[0-9]"), key=get_order
+                image_path.glob("[0-9]*"), key=get_order
             )  # look for all subfolders in the numerical order
             logger.info(f"Found {len(class_dirs)} classes in {image_path}")
             self.files = []
@@ -202,7 +202,7 @@ def get_dataloader(
     path: str,
     nsample: int = -1,
     batch_size: int = 32,
-    num_workers: int = 1,
+    num_workers: int = 0,
     transform=None,
     seed: int = 13579,
     random_sample: bool = True,
