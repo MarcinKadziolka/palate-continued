@@ -659,6 +659,9 @@ def main():
         gen_gt = gen_representations[mask_keep]
         gen_lt = gen_representations[mask_low]
 
+        if len(gen_gt) == 0:
+            logger.warning(f"Skipping {gen_path}: empty gen_gt")
+            continue
 
         f_gt = len(gen_gt) / len(gen_representations)
         f_lt = len(gen_lt) / len(gen_representations)
@@ -673,39 +676,44 @@ def main():
             sigma=args.sigma,
         )
 
-        # ==============================
-        # DMMD
-        # ==============================
-        dmmd_lt, _ = dmmd_blockwise_jax(
-            x=gen_lt,
-            y=D,
-            sigma=args.sigma,
-        )
-
-        dmmd_gt, _ = dmmd_blockwise_jax(
-            x=gen_gt,
-            y=D,
-            sigma=args.sigma,
-        )
-
-        numerator = dmmd_lt * f_lt
-        denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
-        S_dmmd = numerator / denominator if denominator > 0 else 0.0
-
-        # ==============================
-        # Final mPALATE
-        # ==============================
         S_palate = pal_gt.palate_metrics.palate
-        m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+
+        # ==============================
+        # DMMD (only if gen_lt exists)
+        # ==============================
+        if len(gen_lt) > 0:
+            dmmd_lt, _ = dmmd_blockwise_jax(
+                x=gen_lt,
+                y=D,
+                sigma=args.sigma,
+            )
+
+            dmmd_gt, _ = dmmd_blockwise_jax(
+                x=gen_gt,
+                y=D,
+                sigma=args.sigma,
+            )
+
+            numerator = dmmd_lt * f_lt
+            denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
+            S_dmmd = numerator / denominator if denominator > 0 else 0.0
+
+            m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+        else:
+            # No low-density samples → trust PALATE only
+            dmmd_lt = None
+            dmmd_gt = None
+            S_dmmd = None
+            m_palate = S_palate
 
         # ==============================
         # Save
         # ==============================
         extra_scores = {
             "m_palate": float(m_palate),
-            "dmmd_gen_lt_data": float(dmmd_lt),
-            "dmmd_gen_gt_data": float(dmmd_gt),
-            "dmmd_weighted": float(S_dmmd),
+            "dmmd_gen_lt_data": float(dmmd_lt) if dmmd_lt is not None else None,
+            "dmmd_gen_gt_data": float(dmmd_gt) if dmmd_gt is not None else None,
+            "dmmd_weighted": float(S_dmmd) if S_dmmd is not None else None,
             "gen_low_frac": float(f_lt),
             "gen_high_frac": float(f_gt),
             "tau": float(tau),
