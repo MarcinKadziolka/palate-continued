@@ -1,5 +1,6 @@
 # This script contains modified parts of code from repository: https://github.com/layer6ai-labs/dgm-eval
 
+import time
 import csv
 import dataclasses
 import logging
@@ -529,6 +530,7 @@ def main():
         for gen_id in gen_ids:
             gen_representations = load_reps_from_npz(gen_id)
 
+            t0 = time.perf_counter()
             # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
             D = np.vstack([train_representations, test_representations])
             sigma_D = np.std(D, axis=0).astype(np.float32)
@@ -575,6 +577,9 @@ def main():
 
 
             m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+            t1 = time.perf_counter()
+            elapsed_sec = t1 - t0
+
             # ----- Save -----
             extra_scores = {
                 "m_palate": float(m_palate),
@@ -591,6 +596,8 @@ def main():
 
                 # --- Local PALATE ---
                 "palate_local": float(S_palate),
+                "runtime_sec": float(elapsed_sec),
+                "samples_per_sec": float(len(gen_representations) / elapsed_sec),
             }
 
             save_score(
@@ -641,6 +648,7 @@ def main():
         gen_representations = compute_representations(
             gen_path, model, num_workers, device, args
         )
+        t0 = time.perf_counter()
 
         # ==============================
         # GLOBAL KDE (same as NPZ mode)
@@ -701,6 +709,8 @@ def main():
             dmmd_gt = None
             S_dmmd = None
             m_palate = S_palate
+        t1 = time.perf_counter()
+        elapsed_sec = t1 - t0
 
         # ==============================
         # Save
@@ -714,6 +724,8 @@ def main():
             "gen_high_frac": float(f_gt),
             "tau": float(tau),
             "palate_local": float(S_palate),
+            "runtime_sec": float(elapsed_sec),
+            "samples_per_sec": float(len(gen_representations) / elapsed_sec),
         }
 
         save_score(
