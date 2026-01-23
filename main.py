@@ -659,10 +659,6 @@ def main():
         gen_gt = gen_representations[mask_keep]
         gen_lt = gen_representations[mask_low]
 
-        if len(gen_gt) == 0:
-            logger.warning(f"Skipping {gen_path}: empty gen_gt")
-            continue
-
         f_gt = len(gen_gt) / len(gen_representations)
         f_lt = len(gen_lt) / len(gen_representations)
 
