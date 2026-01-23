@@ -201,6 +201,8 @@ def get_dataloader_from_path(
     )
     return dataloader
 
+def now():
+    return time.perf_counter()
 
 def create_unique_exp_dir() -> str:
     if os.getenv("OAR_JOB_ID"):
@@ -530,8 +532,13 @@ def main():
         for gen_id in gen_ids:
             gen_representations = load_reps_from_npz(gen_id)
 
-            t0 = time.perf_counter()
-            # ===== GLOBAL KDE₁ + THRESHOLD (ONCE PER TRAIN/TEST) =====
+            t_total_start = now()
+
+            # ==============================
+            # KDE
+            # ==============================
+            t_kde_start = now()
+
             D = np.vstack([train_representations, test_representations])
             sigma_D = np.std(D, axis=0).astype(np.float32)
             tau = float(args.tau)
@@ -543,14 +550,18 @@ def main():
                 tau,
             )
 
-            # ---- FILTER GEN REPRESENTATIONS ----
             gen_gt = gen_representations[mask_keep]
             gen_lt = gen_representations[mask_low]
-            if len(gen_gt) == 0 or len(gen_lt) == 0:
-                logger.warning(f"Skipping {gen_id}: empty gen_gt or gen_lt")
 
             f_gt = len(gen_gt) / len(gen_representations)
             f_lt = len(gen_lt) / len(gen_representations)
+
+            t_kde_end = now()
+
+            # ==============================
+            # PALATE
+            # ==============================
+            t_palate_start = now()
 
             pal_gt = compute_palate(
                 train_representations=train_representations,
@@ -558,11 +569,22 @@ def main():
                 gen_representations=gen_gt,
                 sigma=args.sigma,
             )
+
+            S_palate = pal_gt.palate_metrics.palate
+
+            t_palate_end = now()
+
+            # ==============================
+            # DMMD
+            # ==============================
+            t_dmmd_start = now()
+
             dmmd_lt, _ = dmmd_blockwise_jax(
                 x=gen_lt,
                 y=D,
                 sigma=args.sigma,
             )
+
             dmmd_gt, _ = dmmd_blockwise_jax(
                 x=gen_gt,
                 y=D,
@@ -571,39 +593,46 @@ def main():
 
             numerator = dmmd_lt * f_lt
             denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
-
             S_dmmd = numerator / denominator if denominator > 0 else 0.0
-            S_palate = pal_gt.palate_metrics.palate
 
+            t_dmmd_end = now()
 
+            # ==============================
+            # FINAL SCORE
+            # ==============================
             m_palate = 0.5 * S_dmmd + 0.5 * S_palate
-            t1 = time.perf_counter()
-            elapsed_sec = t1 - t0
 
-            # ----- Save -----
+            t_total_end = now()
+
+            # ==============================
+            # SAVE
+            # ==============================
             extra_scores = {
                 "m_palate": float(m_palate),
 
-                # --- DMMD terms ---
+                # --- metrics ---
                 "dmmd_gen_lt_data": float(dmmd_lt),
                 "dmmd_gen_gt_data": float(dmmd_gt),
                 "dmmd_weighted": float(S_dmmd),
+                "palate_local": float(S_palate),
 
-                # --- KDE stats ---
+                # --- KDE ---
                 "gen_low_frac": float(f_lt),
                 "gen_high_frac": float(f_gt),
                 "tau": float(tau),
 
-                # --- Local PALATE ---
-                "palate_local": float(S_palate),
-                "runtime_sec": float(elapsed_sec),
-                "samples_per_sec": float(len(gen_representations) / elapsed_sec),
+                # --- timing ---
+                "time_kde": t_kde_end - t_kde_start,
+                "time_palate": t_palate_end - t_palate_start,
+                "time_dmmd": t_dmmd_end - t_dmmd_start,
+                "time_total": t_total_end - t_total_start,
+                "samples_per_sec": len(gen_representations) / (t_total_end - t_total_start),
             }
 
             save_score(
                 palate_components=pal_gt,
                 output_dir=output_experiment_dir,
-                model=model,              # None → handled inside save_score
+                model=model,
                 train_path=train_id,
                 test_path=test_id,
                 gen_path=gen_id,
@@ -648,20 +677,20 @@ def main():
         gen_representations = compute_representations(
             gen_path, model, num_workers, device, args
         )
-        t0 = time.perf_counter()
+
+        t_total_start = now()
 
         # ==============================
-        # GLOBAL KDE (same as NPZ mode)
+        # KDE
         # ==============================
+        t_kde_start = now()
+
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
 
         mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
-            gen_representations,
-            D,
-            sigma_D,
-            tau,
+            gen_representations, D, sigma_D, tau
         )
 
         gen_gt = gen_representations[mask_keep]
@@ -670,9 +699,13 @@ def main():
         f_gt = len(gen_gt) / len(gen_representations)
         f_lt = len(gen_lt) / len(gen_representations)
 
+        t_kde_end = now()
+
         # ==============================
-        # PALATE (GT only)
+        # PALATE
         # ==============================
+        t_palate_start = now()
+
         pal_gt = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
@@ -682,50 +715,44 @@ def main():
 
         S_palate = pal_gt.palate_metrics.palate
 
-        # ==============================
-        # DMMD (only if gen_lt exists)
-        # ==============================
-        if len(gen_lt) > 0:
-            dmmd_lt, _ = dmmd_blockwise_jax(
-                x=gen_lt,
-                y=D,
-                sigma=args.sigma,
-            )
-
-            dmmd_gt, _ = dmmd_blockwise_jax(
-                x=gen_gt,
-                y=D,
-                sigma=args.sigma,
-            )
-
-            numerator = dmmd_lt * f_lt
-            denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
-            S_dmmd = numerator / denominator if denominator > 0 else 0.0
-
-            m_palate = 0.5 * S_dmmd + 0.5 * S_palate
-        else:
-            # No low-density samples → trust PALATE only
-            dmmd_lt = None
-            dmmd_gt = None
-            S_dmmd = None
-            m_palate = S_palate
-        t1 = time.perf_counter()
-        elapsed_sec = t1 - t0
+        t_palate_end = now()
 
         # ==============================
-        # Save
+        # DMMD
         # ==============================
+        t_dmmd_start = now()
+
+        dmmd_lt, _ = dmmd_blockwise_jax(x=gen_lt, y=D, sigma=args.sigma)
+        dmmd_gt, _ = dmmd_blockwise_jax(x=gen_gt, y=D, sigma=args.sigma)
+
+        numerator = dmmd_lt * f_lt
+        denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
+        S_dmmd = numerator / denominator if denominator > 0 else 0.0
+
+        t_dmmd_end = now()
+
+        # ==============================
+        # FINAL
+        # ==============================
+        m_palate = 0.5 * S_dmmd + 0.5 * S_palate
+        t_total_end = now()
+
         extra_scores = {
             "m_palate": float(m_palate),
-            "dmmd_gen_lt_data": float(dmmd_lt) if dmmd_lt is not None else None,
-            "dmmd_gen_gt_data": float(dmmd_gt) if dmmd_gt is not None else None,
-            "dmmd_weighted": float(S_dmmd) if S_dmmd is not None else None,
+            "dmmd_gen_lt_data": float(dmmd_lt),
+            "dmmd_gen_gt_data": float(dmmd_gt),
+            "dmmd_weighted": float(S_dmmd),
             "gen_low_frac": float(f_lt),
             "gen_high_frac": float(f_gt),
             "tau": float(tau),
             "palate_local": float(S_palate),
-            "runtime_sec": float(elapsed_sec),
-            "samples_per_sec": float(len(gen_representations) / elapsed_sec),
+
+            # timing
+            "time_kde": t_kde_end - t_kde_start,
+            "time_palate": t_palate_end - t_palate_start,
+            "time_dmmd": t_dmmd_end - t_dmmd_start,
+            "time_total": t_total_end - t_total_start,
+            "samples_per_sec": len(gen_representations) / (t_total_end - t_total_start),
         }
 
         save_score(
