@@ -96,6 +96,16 @@ class PalateComponents(IterableDataclass):
 # =========================
 # Main computation
 # =========================
+def flatten_dataclass(data_class: IterableDataclass) -> dict:
+    """Flatten nested dataclasses into a single dict."""
+    result = {}
+    for field, value in data_class:
+        if isinstance(value, IterableDataclass):
+            result.update(flatten_dataclass(value))
+        else:
+            result[field] = value
+    return result
+
 
 def compute_palate(
     *,
