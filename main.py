@@ -453,9 +453,12 @@ def main():
         logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
 
-        gen_representations = compute_representations(
-            gen_path, model, num_workers, device, args
-        )
+        if args.load_npz:
+            gen_representations = load_reps_from_npz(gen_path)
+        else:
+            gen_representations = compute_representations(
+                gen_path, model, num_workers, device, args
+            )
 
         palate_components: PalateComponents = compute_palate(
             train_representations=train_representations,
