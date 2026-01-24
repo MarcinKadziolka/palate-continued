@@ -4,23 +4,34 @@ from dataclasses import dataclass
 import dataclasses
 import numpy as np
 import sympy as sp
+import logging
 
 from jax import Array
-import logging
 from dmmd import dmmd_blockwise
 
 logger = logging.getLogger(__name__)
+
+# =========================
+# Symbolic definitions
+# =========================
+
 dmmd_test_sym, dmmd_train_sym, denominator_scale_sym = sp.symbols(
     "dmmd_test dmmd_train denominator_scale"
 )
-palate_sym = sp.symbols("palate")
 
+# palate uses sigma / 3
 PALATE_EXPR = dmmd_test_sym / (dmmd_test_sym + dmmd_train_sym)
+
+# m_palate:
+#   first term → sigma
+#   second term → sigma / 3
 M_PALATE_EXPR = (
-    dmmd_test_sym / (2 * denominator_scale_sym) + sp.Rational(1, 2) * palate_sym
+    dmmd_test_sym / (2 * denominator_scale_sym)
+    + sp.Rational(1, 2) * PALATE_EXPR
 )
 
 MODULE_FOR_SYMPY = "numpy"
+
 PALATE_FN = sp.lambdify(
     (dmmd_train_sym, dmmd_test_sym),
     PALATE_EXPR,
@@ -28,7 +39,7 @@ PALATE_FN = sp.lambdify(
 )
 
 M_PALATE_FN = sp.lambdify(
-    (dmmd_test_sym, denominator_scale_sym, palate_sym),
+    (dmmd_test_sym, denominator_scale_sym, dmmd_train_sym),
     M_PALATE_EXPR,
     modules=MODULE_FOR_SYMPY,
 )
@@ -38,28 +49,30 @@ M_PALATE_FORMULA = str(M_PALATE_EXPR)
 
 
 def formula_hash(expr: sp.Expr) -> str:
-    """Structural hash of a symbolic expression."""
     return hashlib.sha256(sp.srepr(expr).encode()).hexdigest()[:12]
 
 
 PALATE_FORMULA_HASH = formula_hash(PALATE_EXPR)
 M_PALATE_FORMULA_HASH = formula_hash(M_PALATE_EXPR)
 
+# =========================
+# Dataclasses
+# =========================
 
 @dataclass(frozen=True)
 class IterableDataclass:
     def __iter__(self):
-        fields = dataclasses.fields(self)
-        for field in fields:
+        for field in dataclasses.fields(self):
             yield field.name, getattr(self, field.name)
 
 
 @dataclass(frozen=True)
 class DmmdValues(IterableDataclass):
-    train_gen: Array
-    test_gen: Array
-    test_train: Array
-    denominator_scale: Array
+    train_gen_sigma: Array
+    test_gen_sigma: Array
+    test_gen_sigma3: Array
+    train_gen_sigma3: Array
+    denominator_scale_sigma: Array
 
 
 @dataclass(frozen=True)
@@ -70,32 +83,19 @@ class PalateMetrics(IterableDataclass):
 
 @dataclass(frozen=True)
 class PalateComponents(IterableDataclass):
-    """Store the partial results of the calculations along with additional data for reproducibility."""
-
-    # computed
     palate_metrics: PalateMetrics
-
-    # raw
     dmmd_values: DmmdValues
     sigma: float
 
-    # formulas
-    m_palate_formula: str
     palate_formula: str
-    m_palate_formula_hash: str
+    m_palate_formula: str
     palate_formula_hash: str
+    m_palate_formula_hash: str
 
 
-def flatten_dataclass(data_class: IterableDataclass) -> dict[str, float | str]:
-    field_to_value = {}
-    for field, value in data_class:
-        if isinstance(value, IterableDataclass):
-            sub_field_to_value = flatten_dataclass(value)
-            field_to_value = {**field_to_value, **sub_field_to_value}
-        else:
-            field_to_value[field] = value
-    return field_to_value
-
+# =========================
+# Main computation
+# =========================
 
 def compute_palate(
     *,
@@ -104,33 +104,46 @@ def compute_palate(
     gen_representations: np.ndarray,
     sigma: float,
 ) -> PalateComponents:
+
     logger.info("Computing DMMD values...")
     t0 = time.time()
 
-    dmmd_train_gen, _ = dmmd_blockwise(
+    sigma3 = sigma / 3
+
+    # --- sigma ---
+    dmmd_train_gen_sigma, _ = dmmd_blockwise(
         x=train_representations,
         y=gen_representations,
         sigma=sigma,
     )
-    dmmd_test_gen, denominator_scale = dmmd_blockwise(
+
+    dmmd_test_gen_sigma, denom_sigma = dmmd_blockwise(
         x=test_representations,
         y=gen_representations,
         sigma=sigma,
     )
 
-    dmmd_test_train, _ = dmmd_blockwise(
+    # --- sigma / 3 ---
+    dmmd_test_gen_sigma3, _ = dmmd_blockwise(
         x=test_representations,
-        y=train_representations,
-        sigma=sigma,
+        y=gen_representations,
+        sigma=sigma3,
+    )
+
+    dmmd_train_gen_sigma3, _ = dmmd_blockwise(
+        x=train_representations,
+        y=gen_representations,
+        sigma=sigma3,
     )
 
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
     dmmd_values = DmmdValues(
-        train_gen=dmmd_train_gen,
-        test_gen=dmmd_test_gen,
-        test_train=dmmd_test_train,
-        denominator_scale=denominator_scale,
+        train_gen_sigma=dmmd_train_gen_sigma,
+        test_gen_sigma=dmmd_test_gen_sigma,
+        test_gen_sigma3=dmmd_test_gen_sigma3,
+        train_gen_sigma3=dmmd_train_gen_sigma3,
+        denominator_scale_sigma=denom_sigma,
     )
 
     palate_metrics = _compute_palate_from_dmmd(dmmd_values)
@@ -146,15 +159,27 @@ def compute_palate(
     )
 
 
+# =========================
+# Final metric
+# =========================
+
 def _compute_palate_from_dmmd(dmmd: DmmdValues) -> PalateMetrics:
     logger.info("Computing palate metrics...")
     t0 = time.time()
 
-    palate_val = PALATE_FN(dmmd.train_gen, dmmd.test_gen)
+    # palate → sigma / 3
+    palate_val = PALATE_FN(
+        dmmd.train_gen_sigma3,
+        dmmd.test_gen_sigma3,
+    )
+
+    # m_palate:
+    #   first term → sigma
+    #   second term → sigma / 3
     m_palate_val = M_PALATE_FN(
-        dmmd.test_gen,
-        dmmd.denominator_scale,
-        palate_val,
+        dmmd.test_gen_sigma,
+        dmmd.denominator_scale_sigma,
+        dmmd.train_gen_sigma3,
     )
 
     logger.info(
