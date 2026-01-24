@@ -92,6 +92,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--tau",
+    type=float,
+    default=-300.0,
+    help="Global KDE log-density threshold"
+)
+
+parser.add_argument(
     "--exp_dir",
     type=str,
     default=None,
@@ -364,6 +371,30 @@ def load_reps_from_path(
         return reps
     else:
         return None
+from scipy.special import logsumexp
+
+
+def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
+    inv_sigma2 = 1.0 / (sigma ** 2)
+    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
+
+    out = np.empty(len(query), dtype=np.float32)
+
+    for i in range(0, len(query), batch_size):
+        q = query[i:i + batch_size]
+        q_norm = np.sum(q ** 2 * inv_sigma2, axis=1)[:, None]
+        cross = (q * inv_sigma2) @ data.T
+        d = q_norm + data_norm[None, :] - 2.0 * cross
+        out[i:i + batch_size] = logsumexp(-0.5 * d, axis=1) - np.log(len(data))
+
+    return out
+
+
+def filter_gen_by_global_kde(gen, D, sigma_D, tau):
+    logp = log_kde_anisotropic_batched(gen, D, sigma_D)
+    mask_keep = logp >= tau
+    mask_low = ~mask_keep
+    return mask_keep, mask_low, logp
 
 def load_reps_from_npz(path: str) -> np.ndarray:
     if not path.endswith(".npz"):
@@ -451,6 +482,7 @@ def main():
         )
         logger.info("Finished loading/computing test representations")
         logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+
     for gen_path in gen_paths:
 
         if args.load_npz:
@@ -460,10 +492,30 @@ def main():
                 gen_path, model, num_workers, device, args
             )
 
-        palate_components: PalateComponents = compute_palate(
+        # ==============================
+        # KDE FILTERING
+        # ==============================
+        D = np.vstack([train_representations, test_representations])
+
+        sigma_D = np.std(D, axis=0).astype(np.float32)
+        tau = float(args.tau) if hasattr(args, "tau") else -9.0
+
+        mask_keep, mask_low, _ = filter_gen_by_global_kde(
+            gen_representations,
+            D,
+            sigma_D,
+            tau,
+        )
+
+        gen_gt = gen_representations[mask_keep]
+
+        # ==============================
+        # PALATE ON FILTERED SAMPLES
+        # ==============================
+        palate_components = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
-            gen_representations=gen_representations,
+            gen_representations=gen_gt,  # ← IMPORTANT
             sigma=args.sigma,
         )
 
@@ -475,7 +527,7 @@ def main():
             test_path,
             gen_path,
             args.nsample,
-            args.sigma
+            args.sigma,
         )
 
 
