@@ -8,6 +8,7 @@ import logging
 
 from jax import Array
 from dmmd import dmmd_blockwise_jax
+from dmmd import dmmd_blockwise
 
 logger = logging.getLogger(__name__)
 
@@ -121,13 +122,13 @@ def compute_palate(
     sigma3 = sigma / 3
 
     # --- sigma ---
-    dmmd_train_gen_sigma, _ = dmmd_blockwise_jax(
+    dmmd_train_gen_sigma, _ = dmmd_blockwise(
         x=train_representations,
         y=gen_representations,
         sigma=sigma,
     )
 
-    dmmd_test_gen_sigma, denom_sigma = dmmd_blockwise_jax(
+    dmmd_test_gen_sigma, denom_sigma = dmmd_blockwise(
         x=test_representations,
         y=gen_representations,
         sigma=sigma,
