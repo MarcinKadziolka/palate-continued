@@ -498,7 +498,7 @@ def main():
         D = np.vstack([train_representations, test_representations])
 
         sigma_D = np.std(D, axis=0).astype(np.float32)
-        tau = float(args.tau) if hasattr(args, "tau") else -9.0
+        tau = float(args.tau) if hasattr(args, "tau") else -300.0
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
             gen_representations,

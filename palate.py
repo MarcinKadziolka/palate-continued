@@ -7,7 +7,7 @@ import sympy as sp
 import logging
 
 from jax import Array
-from dmmd import dmmd_blockwise
+from dmmd import dmmd_blockwise_jax
 
 logger = logging.getLogger(__name__)
 
@@ -121,26 +121,26 @@ def compute_palate(
     sigma3 = sigma / 3
 
     # --- sigma ---
-    dmmd_train_gen_sigma, _ = dmmd_blockwise(
+    dmmd_train_gen_sigma, _ = dmmd_blockwise_jax(
         x=train_representations,
         y=gen_representations,
         sigma=sigma,
     )
 
-    dmmd_test_gen_sigma, denom_sigma = dmmd_blockwise(
+    dmmd_test_gen_sigma, denom_sigma = dmmd_blockwise_jax(
         x=test_representations,
         y=gen_representations,
         sigma=sigma,
     )
 
     # --- sigma / 3 ---
-    dmmd_test_gen_sigma3, _ = dmmd_blockwise(
+    dmmd_test_gen_sigma3, _ = dmmd_blockwise_jax(
         x=test_representations,
         y=gen_representations,
         sigma=sigma3,
     )
 
-    dmmd_train_gen_sigma3, _ = dmmd_blockwise(
+    dmmd_train_gen_sigma3, _ = dmmd_blockwise_jax(
         x=train_representations,
         y=gen_representations,
         sigma=sigma3,
