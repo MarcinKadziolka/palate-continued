@@ -515,7 +515,8 @@ def main():
         palate_components = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
-            gen_representations=gen_gt,  # ← IMPORTANT
+            gen_representations=gen_representations,
+            gen_gt=gen_gt,
             sigma=args.sigma,
         )
 
