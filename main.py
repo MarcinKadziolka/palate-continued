@@ -535,8 +535,8 @@ def main():
         # ==============================
         # KDE FILTERING (timed)
         # ==============================
+        '''
         t0 = time.perf_counter()
-
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
@@ -551,7 +551,7 @@ def main():
         gen_gt = gen_representations[mask_keep]
 
         kde_time = time.perf_counter() - t0
-
+        '''
         # ==============================
         # PALATE (timed)
         # ==============================
@@ -561,7 +561,7 @@ def main():
             train_representations=train_representations,
             test_representations=test_representations,
             gen_representations=gen_representations,
-            gen_gt=gen_gt,
+            gen_gt=gen_representations,
             sigma=args.sigma,
         )
 
