@@ -12,6 +12,7 @@ from typing import Literal, Optional, Callable
 from jaxlib.xla_client import Array
 import numpy as np
 import torch
+import time
 
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
@@ -493,12 +494,13 @@ def main():
             )
 
         # ==============================
-        # KDE FILTERING
+        # KDE FILTERING (timed)
         # ==============================
-        D = np.vstack([train_representations, test_representations])
+        t0 = time.perf_counter()
 
+        D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
-        tau = float(args.tau) if hasattr(args, "tau") else -300.0
+        tau = float(args.tau)
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
             gen_representations,
@@ -509,9 +511,13 @@ def main():
 
         gen_gt = gen_representations[mask_keep]
 
+        kde_time = time.perf_counter() - t0
+
         # ==============================
-        # PALATE ON FILTERED SAMPLES
+        # PALATE (timed)
         # ==============================
+        t1 = time.perf_counter()
+
         palate_components = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
@@ -519,6 +525,13 @@ def main():
             gen_gt=gen_gt,
             sigma=args.sigma,
         )
+
+        palate_time = time.perf_counter() - t1
+        total_time = kde_time + palate_time
+        palate_components["time_kde_sec"] = kde_time
+        palate_components["time_palate_sec"] = palate_time
+        palate_components["time_total_sec"] = total_time
+
 
         save_score(
             palate_components,
