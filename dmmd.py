@@ -3,39 +3,37 @@ import jax.numpy as jnp
 
 _BLOCK_SIZE = 1000
 
+def pad_to_block(x, block_size):
+    n, d = x.shape
+    pad = (-n) % block_size
+    return jnp.pad(x, ((0, pad), (0, 0))), n
+
+
 @jax.jit
 def blockwise_kernel_mean(x, y, sigma, block_size=1024):
-    n_x = x.shape[0]
-    n_y = y.shape[0]
-    d = x.shape[1]
+    x, n_x = pad_to_block(x, block_size)
+    y, n_y = pad_to_block(y, block_size)
 
+    d = x.shape[1]
     gamma = 1.0 / (2.0 * sigma**2)
 
-    num_blocks_x = (n_x + block_size - 1) // block_size
-    num_blocks_y = (n_y + block_size - 1) // block_size
+    num_blocks_x = x.shape[0] // block_size
+    num_blocks_y = y.shape[0] // block_size
 
     def body_fun(i, acc):
         bx = i // num_blocks_y
         by = i % num_blocks_y
 
-        x_start = bx * block_size
-        y_start = by * block_size
-
-        # Always slice full block_size
         x_block = jax.lax.dynamic_slice(
             x,
-            (x_start, 0),
+            (bx * block_size, 0),
             (block_size, d),
         )
         y_block = jax.lax.dynamic_slice(
             y,
-            (y_start, 0),
+            (by * block_size, 0),
             (block_size, d),
         )
-
-        # Mask for valid rows
-        x_valid = (x_start + jnp.arange(block_size)) < n_x
-        y_valid = (y_start + jnp.arange(block_size)) < n_y
 
         x_sq = jnp.sum(x_block**2, axis=1, keepdims=True)
         y_sq = jnp.sum(y_block**2, axis=1, keepdims=True)
@@ -44,8 +42,10 @@ def blockwise_kernel_mean(x, y, sigma, block_size=1024):
             -gamma * (x_sq - 2 * x_block @ y_block.T + y_sq.T)
         )
 
-        # Mask invalid rows/cols
-        k = k * x_valid[:, None] * y_valid[None, :]
+        # Mask padded rows
+        x_mask = (bx * block_size + jnp.arange(block_size)) < n_x
+        y_mask = (by * block_size + jnp.arange(block_size)) < n_y
+        k = k * x_mask[:, None] * y_mask[None, :]
 
         return acc + jnp.sum(k)
 
