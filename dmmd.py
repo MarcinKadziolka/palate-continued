@@ -31,8 +31,7 @@ def _blockwise_kernel_mean(x, y, sigma):
         return acc + jnp.sum(k)
 
     total = jax.lax.fori_loop(0, nb * nb, body, 0.0)
-    return total / (n * n)
-
+    return total / jnp.asarray(n * n, dtype=total.dtype)
 
 def dmmd_blockwise(x, y, sigma):
     """
