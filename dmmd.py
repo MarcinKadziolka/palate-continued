@@ -179,7 +179,7 @@ def blockwise_kernel_mean_old(x, y, sigma) -> float:
 '''
 
 @jax.jit
-def blockwise_kernel_mean(x, y, sigma):
+def blockwise_kernel_mean_old(x, y, sigma):
     n = x.shape[0]
     d = x.shape[1]
     gamma = 1.0 / (2.0 * sigma**2)
