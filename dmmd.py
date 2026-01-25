@@ -2,6 +2,20 @@ import jax
 import jax.numpy as jnp
 
 
+# ============================================================
+# Utility: pad to block size (required for JAX correctness)
+# ============================================================
+def pad_to_block(x, block_size):
+    n, d = x.shape
+    pad = (-n) % block_size
+    if pad == 0:
+        return x
+    return jnp.pad(x, ((0, pad), (0, 0)))
+
+
+# ============================================================
+# RBF kernel
+# ============================================================
 @jax.jit
 def _rbf_block(x, y, sigma):
     x2 = jnp.sum(x * x, axis=1)[:, None]
@@ -9,58 +23,55 @@ def _rbf_block(x, y, sigma):
     return jnp.exp(-(x2 + y2 - 2.0 * x @ y.T) / (2.0 * sigma**2))
 
 
+# ============================================================
+# Blockwise kernel mean (exact, JIT-safe)
+# ============================================================
 @jax.jit
 def kernel_mean_blockwise(x, y, sigma, block_size):
-    nx, d = x.shape
+    nx = x.shape[0]
     ny = y.shape[0]
 
-    nbx = (nx + block_size - 1) // block_size
-    nby = (ny + block_size - 1) // block_size
+    nbx = nx // block_size
+    nby = ny // block_size
 
     def body(i, acc):
         bi = i // nby
         bj = i % nby
 
-        xs = bi * block_size
-        ys = bj * block_size
-
-        # Always slice full blocks (static shape)
         xb = jax.lax.dynamic_slice(
             x,
-            (xs, 0),
-            (block_size, d)
+            (bi * block_size, 0),
+            (block_size, x.shape[1])
         )
         yb = jax.lax.dynamic_slice(
             y,
-            (ys, 0),
-            (block_size, d)
+            (bj * block_size, 0),
+            (block_size, y.shape[1])
         )
 
-        # Mask for valid rows
-        x_mask = (xs + jnp.arange(block_size)) < nx
-        y_mask = (ys + jnp.arange(block_size)) < ny
-
-        # Compute kernel
         k = _rbf_block(xb, yb, sigma)
-
-        # Apply mask
-        k = k * x_mask[:, None] * y_mask[None, :]
-
         return acc + jnp.sum(k)
 
     total = jax.lax.fori_loop(
         0,
         nbx * nby,
         body,
-        0.0,
+        0.0
     )
 
     return total / (nx * ny)
 
 
-@jax.jit
+# ============================================================
+# Exact D-MMD
+# ============================================================
 def dmmd_exact(x, y, sigma, block_size=1024):
+    # Pad ONCE (important!)
+    x = pad_to_block(x, block_size)
+    y = pad_to_block(y, block_size)
+
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
+
     return kxx + kyy - 2.0 * kxy
