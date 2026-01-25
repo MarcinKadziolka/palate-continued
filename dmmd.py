@@ -16,7 +16,6 @@ def kernel_mean_blockwise(x, y, sigma, block_size):
 
     nbx = (nx + block_size - 1) // block_size
     nby = (ny + block_size - 1) // block_size
-    total_blocks = nbx * nby
 
     def body(i, acc):
         bi = i // nby
@@ -25,24 +24,33 @@ def kernel_mean_blockwise(x, y, sigma, block_size):
         xs = bi * block_size
         ys = bj * block_size
 
+        # Always slice full blocks (static shape)
         xb = jax.lax.dynamic_slice(
             x,
             (xs, 0),
-            (jnp.minimum(block_size, nx - xs), d),
+            (block_size, d)
         )
-
         yb = jax.lax.dynamic_slice(
             y,
             (ys, 0),
-            (jnp.minimum(block_size, ny - ys), d),
+            (block_size, d)
         )
 
+        # Mask for valid rows
+        x_mask = (xs + jnp.arange(block_size)) < nx
+        y_mask = (ys + jnp.arange(block_size)) < ny
+
+        # Compute kernel
         k = _rbf_block(xb, yb, sigma)
+
+        # Apply mask
+        k = k * x_mask[:, None] * y_mask[None, :]
+
         return acc + jnp.sum(k)
 
     total = jax.lax.fori_loop(
         0,
-        total_blocks,
+        nbx * nby,
         body,
         0.0,
     )
