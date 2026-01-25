@@ -516,7 +516,7 @@ def main():
             train_representations=train_representations,
             test_representations=test_representations,
             gen_representations=gen_representations,
-            gen_gt=gen_gt,
+            gen_gt=gen_representations,
             sigma=args.sigma,
         )
 
