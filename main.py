@@ -566,10 +566,7 @@ def main():
         )
 
         palate_time = time.perf_counter() - t1
-        total_time = kde_time + palate_time
-        palate_components["time_kde_sec"] = kde_time
         palate_components["time_palate_sec"] = palate_time
-        palate_components["time_total_sec"] = total_time
 
 
         save_score(
