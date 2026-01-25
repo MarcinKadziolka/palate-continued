@@ -51,7 +51,7 @@ def compute_palate(
     # palate → sigma / 3 → gen_gt
     # ====================================================
     t0 = time.perf_counter()
-    dmmd_train_sigma3, _ = dmmd_blockwise_jax(
+    dmmd_train_sigma3, _ = dmmd_blockwise(
         train_representations,
         gen_gt,
         sigma=sigma3,
@@ -59,7 +59,7 @@ def compute_palate(
     t_dmmd_train_sigma3 = time.perf_counter() - t0
 
     t0 = time.perf_counter()
-    dmmd_test_sigma3, _ = dmmd_blockwise_jax(
+    dmmd_test_sigma3, _ = dmmd_blockwise(
         test_representations,
         gen_gt,
         sigma=sigma3,
