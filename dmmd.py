@@ -24,28 +24,19 @@ def blockwise_kernel_mean(x, y, sigma, block_size=1024):
         bx = i // num_blocks_y
         by = i % num_blocks_y
 
-        x_block = jax.lax.dynamic_slice(
-            x,
-            (bx * block_size, 0),
-            (block_size, d),
-        )
-        y_block = jax.lax.dynamic_slice(
-            y,
-            (by * block_size, 0),
-            (block_size, d),
-        )
+        x_block = jax.lax.dynamic_slice(x, (bx * block_size, 0), (block_size, d))
+        y_block = jax.lax.dynamic_slice(y, (by * block_size, 0), (block_size, d))
 
         x_sq = jnp.sum(x_block**2, axis=1, keepdims=True)
         y_sq = jnp.sum(y_block**2, axis=1, keepdims=True)
 
-        k = jnp.exp(
-            -gamma * (x_sq - 2 * x_block @ y_block.T + y_sq.T)
-        )
+        dist2 = x_sq - 2 * x_block @ y_block.T + y_sq.T
 
-        # Mask padded rows
         x_mask = (bx * block_size + jnp.arange(block_size)) < n_x
         y_mask = (by * block_size + jnp.arange(block_size)) < n_y
-        k = k * x_mask[:, None] * y_mask[None, :]
+        mask = x_mask[:, None] * y_mask[None, :]
+
+        k = jnp.exp(-gamma * dist2) * mask
 
         return acc + jnp.sum(k)
 
@@ -57,6 +48,7 @@ def blockwise_kernel_mean(x, y, sigma, block_size=1024):
     )
 
     return total / (n_x * n_y)
+
 
 
 
