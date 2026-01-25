@@ -1,228 +1,57 @@
-# coding=utf-8
-# Copyright 2024 The Google Research Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-# This code has been adapted from the repository: https://github.com/google-research/google-research/blob/master/cmmd/main.py.
-
-"""A memory-efficient MMD implementation in JAX."""
-
 import jax
 import jax.numpy as jnp
-import numpy as np
-Array = jnp.ndarray
 
-# The bandwidth parameter for the Gaussian RBF kernel. See the paper for more
-# details.
-_SIGMA = 0.01 #nowa sigma
-
-
-_BLOCK_SIZE = 1000
-
-
-@jax.jit
-def blockwise_kernel_mean(x, y, sigma) -> float:
-    """Computes the mean of the kernel function in a blockwise manner without constructing full matrices.
-
-    sigma: The bandwidth parameter for the Gaussian RBF kernel. See the paper for more details.
-    """
-    n = x.shape[0]
-    num_blocks = n // _BLOCK_SIZE  # Ensure divisibility for simplicity
-    gamma = 1 / (2 * sigma**2)
-
-    def block_kernel_mean(i, mean_accum):
-        row_start = (i // num_blocks) * _BLOCK_SIZE
-        col_start = (i % num_blocks) * _BLOCK_SIZE
-
-        # Slice blocks
-        x_block = jax.lax.dynamic_slice(x, (row_start, 0), (_BLOCK_SIZE, x.shape[1]))
-        y_block = jax.lax.dynamic_slice(y, (col_start, 0), (_BLOCK_SIZE, y.shape[1]))
-
-        # Compute squared norms for blocks
-        x_sq_block = jnp.diag(jnp.matmul(x_block, x_block.T))
-        y_sq_block = jnp.diag(jnp.matmul(y_block, y_block.T))
-
-        # Compute kernel matrix block
-        k_block = jnp.exp(
-            -gamma
-            * (
-                -2 * jnp.matmul(x_block, y_block.T)
-                + jnp.expand_dims(x_sq_block, 1)
-                + jnp.expand_dims(y_sq_block, 0)
-            )
-        )
-
-        return mean_accum + jnp.mean(k_block)
-
-    mean_sum = jax.lax.fori_loop(0, num_blocks**2, block_kernel_mean, 0.0)
-    return mean_sum / (num_blocks**2)
-
-
-@jax.jit
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Array, jax.Array]:
-    """Computes D-MMD using blockwise kernel computation."""
-    mean_kxx = blockwise_kernel_mean(x, x, sigma)
-    mean_kxy = blockwise_kernel_mean(x, y, sigma)
-    mean_kyy = blockwise_kernel_mean(y, y, sigma)
-
-    return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
-
-def dmmd_blockwise_general(x, y, sigma, block_size=100):
-    def kernel_mean(a, b):
-        total = 0.0
-        count = 0
-
-        for i in range(0, len(a), block_size):
-            a_block = a[i:i+block_size]
-            for j in range(0, len(b), block_size):
-                b_block = b[j:j+block_size]
-
-                sq = (
-                    np.sum(a_block**2, axis=1)[:, None]
-                    + np.sum(b_block**2, axis=1)[None, :]
-                    - 2 * a_block @ b_block.T
-                )
-                total += np.exp(-sq / (2 * sigma**2)).sum()
-                count += a_block.shape[0] * b_block.shape[0]
-
-        return total / count
-
-    kxx = kernel_mean(x, x)
-    kyy = kernel_mean(y, y)
-    kxy = kernel_mean(x, y)
-
-    return kxx + kyy - 2 * kxy, kxx + kyy
-
-import jax
-import jax.numpy as jnp
 
 @jax.jit
 def _rbf_block(x, y, sigma):
-    x_norm = jnp.sum(x**2, axis=1)[:, None]
-    y_norm = jnp.sum(y**2, axis=1)[None, :]
-    sq = x_norm + y_norm - 2.0 * x @ y.T
-    return jnp.exp(-sq / (2 * sigma**2))
+    x2 = jnp.sum(x * x, axis=1)[:, None]
+    y2 = jnp.sum(y * y, axis=1)[None, :]
+    return jnp.exp(-(x2 + y2 - 2.0 * x @ y.T) / (2.0 * sigma**2))
 
-
-def kernel_mean(a, b, sigma, block_size):
-    total = 0.0
-    count = 0.0
-
-    for i in range(0, a.shape[0], block_size):
-        a_blk = a[i:i + block_size]
-        for j in range(0, b.shape[0], block_size):
-            b_blk = b[j:j + block_size]
-
-            k = _rbf_block(a_blk, b_blk, sigma)
-
-            # leave JAX world here
-            total += float(jnp.sum(k))
-            count += k.size
-
-    return total / count
-
-
-def dmmd_blockwise_jax(x, y, sigma, block_size=1000):
-    kxx = kernel_mean(x, x, sigma, block_size)
-    kyy = kernel_mean(y, y, sigma, block_size)
-    kxy = kernel_mean(x, y, sigma, block_size)
-
-    return kxx + kyy - 2 * kxy, kxx + kyy
-
-'''
-@jax.jit
-def blockwise_kernel_mean_old(x, y, sigma) -> float:
-    """Computes the mean of the kernel function in a blockwise manner without constructing full matrices.
-
-    sigma: The bandwidth parameter for the Gaussian RBF kernel. See the paper for more details.
-    """
-    n = x.shape[0]
-    num_blocks = n // _BLOCK_SIZE  # Ensure divisibility for simplicity
-    gamma = 1 / (2 * sigma**2)
-
-    def block_kernel_mean(i, mean_accum):
-        row_start = (i // num_blocks) * _BLOCK_SIZE
-        col_start = (i % num_blocks) * _BLOCK_SIZE
-
-        # Slice blocks
-        x_block = jax.lax.dynamic_slice(x, (row_start, 0), (_BLOCK_SIZE, x.shape[1]))
-        y_block = jax.lax.dynamic_slice(y, (col_start, 0), (_BLOCK_SIZE, y.shape[1]))
-
-        # Compute squared norms for blocks
-        x_sq_block = jnp.diag(jnp.matmul(x_block, x_block.T))
-        y_sq_block = jnp.diag(jnp.matmul(y_block, y_block.T))
-
-        # Compute kernel matrix block
-        k_block = jnp.exp(
-            -gamma
-            * (
-                -2 * jnp.matmul(x_block, y_block.T)
-                + jnp.expand_dims(x_sq_block, 1)
-                + jnp.expand_dims(y_sq_block, 0)
-            )
-        )
-
-        return mean_accum + jnp.mean(k_block)
-
-    mean_sum = jax.lax.fori_loop(0, num_blocks**2, block_kernel_mean, 0.0)
-    return mean_sum / (num_blocks**2)
-'''
 
 @jax.jit
-def blockwise_kernel_mean_old(x, y, sigma):
-    n = x.shape[0]
-    d = x.shape[1]
-    gamma = 1.0 / (2.0 * sigma**2)
+def kernel_mean_blockwise(x, y, sigma, block_size):
+    nx, d = x.shape
+    ny = y.shape[0]
 
-    block_size = _BLOCK_SIZE
-    num_blocks = (n + block_size - 1) // block_size  # ceil division
+    nbx = (nx + block_size - 1) // block_size
+    nby = (ny + block_size - 1) // block_size
 
-    def body(i, acc):
-        bi = i // num_blocks
-        bj = i % num_blocks
+    def body(acc, idx):
+        i = idx // nby
+        j = idx % nby
 
-        row_start = bi * block_size
-        col_start = bj * block_size
+        xs = i * block_size
+        ys = j * block_size
 
-        row_size = jnp.minimum(block_size, n - row_start)
-        col_size = jnp.minimum(block_size, n - col_start)
-
-        x_block = jax.lax.dynamic_slice(
+        xb = jax.lax.dynamic_slice(
             x,
-            (row_start, 0),
-            (row_size, d)
+            (xs, 0),
+            (jnp.minimum(block_size, nx - xs), d)
         )
 
-        y_block = jax.lax.dynamic_slice(
+        yb = jax.lax.dynamic_slice(
             y,
-            (col_start, 0),
-            (col_size, d)
+            (ys, 0),
+            (jnp.minimum(block_size, ny - ys), d)
         )
 
-        x_norm = jnp.sum(x_block**2, axis=1)[:, None]
-        y_norm = jnp.sum(y_block**2, axis=1)[None, :]
-        k = jnp.exp(-gamma * (x_norm + y_norm - 2 * x_block @ y_block.T))
+        k = _rbf_block(xb, yb, sigma)
+        return acc + jnp.sum(k), None
 
-        return acc + jnp.sum(k)
+    total, _ = jax.lax.scan(
+        body,
+        0.0,
+        jnp.arange(nbx * nby)
+    )
 
-    total = jax.lax.fori_loop(0, num_blocks * num_blocks, body, 0.0)
-    return total / (n * n)
+    return total / (nx * ny)
 
 
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Array, jax.Array]:
-    """Computes D-MMD using blockwise kernel computation."""
-    mean_kxx = kernel_mean(x, x, sigma, block_size=1000)
-    mean_kxy = kernel_mean(x, y, sigma, block_size=1000)
-    mean_kyy = kernel_mean(y, y, sigma, block_size=1000)
+@jax.jit
+def dmmd_exact(x, y, sigma, block_size=1024):
+    kxx = kernel_mean_blockwise(x, x, sigma, block_size)
+    kyy = kernel_mean_blockwise(y, y, sigma, block_size)
+    kxy = kernel_mean_blockwise(x, y, sigma, block_size)
 
-    return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
+    return kxx + kyy - 2.0 * kxy
