@@ -219,7 +219,6 @@ def blockwise_kernel_mean_old(x, y, sigma):
     return total / (n * n)
 
 
-@jax.jit
 def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Array, jax.Array]:
     """Computes D-MMD using blockwise kernel computation."""
     mean_kxx = kernel_mean(x, x, sigma, block_size=1000)
