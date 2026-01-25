@@ -261,7 +261,7 @@ def save_score(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    scores = flatten_dataclass(palate_components)
+    scores = palate_components
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
     write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
