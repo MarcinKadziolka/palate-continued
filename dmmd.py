@@ -1,6 +1,8 @@
 import jax
 import jax.numpy as jnp
 
+_BLOCK_SIZE = 1000
+
 @jax.jit
 def blockwise_kernel_mean(x, y, block_size=_BLOCK_SIZE):
     n_x = x.shape[0]
