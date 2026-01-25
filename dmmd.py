@@ -4,10 +4,10 @@ import jax.numpy as jnp
 _BLOCK_SIZE = 1000
 
 @jax.jit
-def blockwise_kernel_mean(x, y, block_size=_BLOCK_SIZE):
+def blockwise_kernel_mean(x, y, sigma, block_size=_BLOCK_SIZE):
     n_x = x.shape[0]
     n_y = y.shape[0]
-    gamma = 1.0 / (2 * _SIGMA**2)
+    gamma = 1.0 / (2 * sigma**2)
 
     def body_fun(i, acc):
         bx = i // num_blocks_y
@@ -51,9 +51,9 @@ def blockwise_kernel_mean(x, y, block_size=_BLOCK_SIZE):
 
 
 @jax.jit
-def dmmd(x, y):
-    kxx = blockwise_kernel_mean(x, x)
-    kxy = blockwise_kernel_mean(x, y)
-    kyy = blockwise_kernel_mean(y, y)
+def dmmd(x, y, sigma):
+    kxx = blockwise_kernel_mean(x, x, sigma)
+    kxy = blockwise_kernel_mean(x, y, sigma)
+    kyy = blockwise_kernel_mean(y, y, sigma)
     return kxx + kyy - 2 * kxy, kxx + kyy
 
