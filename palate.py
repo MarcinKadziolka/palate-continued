@@ -8,7 +8,6 @@ import logging
 import time
 
 from jax import Array
-from dmmd import dmmd_blockwise_jax
 from dmmd import dmmd_blockwise
 
 logger = logging.getLogger(__name__)
