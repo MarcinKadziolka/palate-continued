@@ -139,6 +139,7 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1000):
 
     return kxx + kyy - 2 * kxy, kxx + kyy
 
+'''
 @jax.jit
 def blockwise_kernel_mean_old(x, y, sigma) -> float:
     """Computes the mean of the kernel function in a blockwise manner without constructing full matrices.
@@ -175,6 +176,48 @@ def blockwise_kernel_mean_old(x, y, sigma) -> float:
 
     mean_sum = jax.lax.fori_loop(0, num_blocks**2, block_kernel_mean, 0.0)
     return mean_sum / (num_blocks**2)
+'''
+
+@jax.jit
+def blockwise_kernel_mean(x, y, sigma):
+    n = x.shape[0]
+    d = x.shape[1]
+    gamma = 1.0 / (2.0 * sigma**2)
+
+    block_size = _BLOCK_SIZE
+    num_blocks = (n + block_size - 1) // block_size  # ceil division
+
+    def body(i, acc):
+        bi = i // num_blocks
+        bj = i % num_blocks
+
+        row_start = bi * block_size
+        col_start = bj * block_size
+
+        row_size = jnp.minimum(block_size, n - row_start)
+        col_size = jnp.minimum(block_size, n - col_start)
+
+        x_block = jax.lax.dynamic_slice(
+            x,
+            (row_start, 0),
+            (row_size, d)
+        )
+
+        y_block = jax.lax.dynamic_slice(
+            y,
+            (col_start, 0),
+            (col_size, d)
+        )
+
+        x_norm = jnp.sum(x_block**2, axis=1)[:, None]
+        y_norm = jnp.sum(y_block**2, axis=1)[None, :]
+        k = jnp.exp(-gamma * (x_norm + y_norm - 2 * x_block @ y_block.T))
+
+        return acc + jnp.sum(k)
+
+    total = jax.lax.fori_loop(0, num_blocks * num_blocks, body, 0.0)
+    return total / (n * n)
+
 
 @jax.jit
 def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Array, jax.Array]:
