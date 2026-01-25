@@ -16,33 +16,35 @@ def kernel_mean_blockwise(x, y, sigma, block_size):
 
     nbx = (nx + block_size - 1) // block_size
     nby = (ny + block_size - 1) // block_size
+    total_blocks = nbx * nby
 
-    def body(acc, idx):
-        i = idx // nby
-        j = idx % nby
+    def body(i, acc):
+        bi = i // nby
+        bj = i % nby
 
-        xs = i * block_size
-        ys = j * block_size
+        xs = bi * block_size
+        ys = bj * block_size
 
         xb = jax.lax.dynamic_slice(
             x,
             (xs, 0),
-            (jnp.minimum(block_size, nx - xs), d)
+            (jnp.minimum(block_size, nx - xs), d),
         )
 
         yb = jax.lax.dynamic_slice(
             y,
             (ys, 0),
-            (jnp.minimum(block_size, ny - ys), d)
+            (jnp.minimum(block_size, ny - ys), d),
         )
 
         k = _rbf_block(xb, yb, sigma)
-        return acc + jnp.sum(k), None
+        return acc + jnp.sum(k)
 
-    total, _ = jax.lax.scan(
+    total = jax.lax.fori_loop(
+        0,
+        total_blocks,
         body,
         0.0,
-        jnp.arange(nbx * nby)
     )
 
     return total / (nx * ny)
@@ -53,5 +55,4 @@ def dmmd_exact(x, y, sigma, block_size=1024):
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
-
     return kxx + kyy - 2.0 * kxy
