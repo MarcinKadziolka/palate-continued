@@ -17,7 +17,7 @@ from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
-from palate import compute_palate, PalateComponents, flatten_dataclass
+from palate import compute_palate
 from representations import get_representations
 
 logger = logging.getLogger(__name__)
@@ -245,8 +245,8 @@ def get_last_x_dirs(path: str, x=2):
 
 
 def save_score(
-    palate_components: PalateComponents,
-    output_dir: str,
+    palate_components,
+    output_dir,
     model,
     train_path,
     test_path,
