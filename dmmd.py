@@ -77,35 +77,6 @@ def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Arra
 
     return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
 
-def dmmd_blockwise_general(x, y, sigma, block_size=100):
-    def kernel_mean(a, b):
-        total = 0.0
-        count = 0
-
-        for i in range(0, len(a), block_size):
-            a_block = a[i:i+block_size]
-            for j in range(0, len(b), block_size):
-                b_block = b[j:j+block_size]
-
-                sq = (
-                    np.sum(a_block**2, axis=1)[:, None]
-                    + np.sum(b_block**2, axis=1)[None, :]
-                    - 2 * a_block @ b_block.T
-                )
-                total += np.exp(-sq / (2 * sigma**2)).sum()
-                count += a_block.shape[0] * b_block.shape[0]
-
-        return total / count
-
-    kxx = kernel_mean(x, x)
-    kyy = kernel_mean(y, y)
-    kxy = kernel_mean(x, y)
-
-    return kxx + kyy - 2 * kxy, kxx + kyy
-
-import jax
-import jax.numpy as jnp
-
 @jax.jit
 def _rbf_block(x, y, sigma):
     x_norm = jnp.sum(x**2, axis=1)[:, None]
@@ -138,45 +109,6 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1000):
     kxy = kernel_mean(x, y, sigma, block_size)
 
     return kxx + kyy - 2 * kxy, kxx + kyy
-
-'''
-@jax.jit
-def blockwise_kernel_mean_old(x, y, sigma) -> float:
-    """Computes the mean of the kernel function in a blockwise manner without constructing full matrices.
-
-    sigma: The bandwidth parameter for the Gaussian RBF kernel. See the paper for more details.
-    """
-    n = x.shape[0]
-    num_blocks = n // _BLOCK_SIZE  # Ensure divisibility for simplicity
-    gamma = 1 / (2 * sigma**2)
-
-    def block_kernel_mean(i, mean_accum):
-        row_start = (i // num_blocks) * _BLOCK_SIZE
-        col_start = (i % num_blocks) * _BLOCK_SIZE
-
-        # Slice blocks
-        x_block = jax.lax.dynamic_slice(x, (row_start, 0), (_BLOCK_SIZE, x.shape[1]))
-        y_block = jax.lax.dynamic_slice(y, (col_start, 0), (_BLOCK_SIZE, y.shape[1]))
-
-        # Compute squared norms for blocks
-        x_sq_block = jnp.diag(jnp.matmul(x_block, x_block.T))
-        y_sq_block = jnp.diag(jnp.matmul(y_block, y_block.T))
-
-        # Compute kernel matrix block
-        k_block = jnp.exp(
-            -gamma
-            * (
-                -2 * jnp.matmul(x_block, y_block.T)
-                + jnp.expand_dims(x_sq_block, 1)
-                + jnp.expand_dims(y_sq_block, 0)
-            )
-        )
-
-        return mean_accum + jnp.mean(k_block)
-
-    mean_sum = jax.lax.fori_loop(0, num_blocks**2, block_kernel_mean, 0.0)
-    return mean_sum / (num_blocks**2)
-'''
 
 @jax.jit
 def blockwise_kernel_mean_old(x, y, sigma):
@@ -217,12 +149,3 @@ def blockwise_kernel_mean_old(x, y, sigma):
 
     total = jax.lax.fori_loop(0, num_blocks * num_blocks, body, 0.0)
     return total / (n * n)
-
-
-def dmmd_blockwise(x: np.ndarray, y: np.ndarray, sigma: float) -> tuple[jax.Array, jax.Array]:
-    """Computes D-MMD using blockwise kernel computation."""
-    mean_kxx = kernel_mean(x, x, sigma, block_size=1000)
-    mean_kxy = kernel_mean(x, y, sigma, block_size=1000)
-    mean_kyy = kernel_mean(y, y, sigma, block_size=1000)
-
-    return mean_kxx + mean_kyy - 2 * mean_kxy, mean_kxx + mean_kyy
