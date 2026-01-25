@@ -10,6 +10,9 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 
 from jaxlib.xla_client import Array
+import jax
+import jax.numpy as jnp
+from jax import jit
 import numpy as np
 import torch
 import time
@@ -374,6 +377,36 @@ def load_reps_from_path(
         return None
 from scipy.special import logsumexp
 
+@jit
+def _kde_chunk(query, data, inv_sigma2):
+    """
+    query: [B, D]
+    data:  [N, D]
+    """
+    q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
+    cross = (query * inv_sigma2) @ data.T
+
+    dist = q_norm + d_norm - 2.0 * cross
+    return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+
+def log_kde_jax(query, data, sigma, batch_size=1024):
+    """
+    Fast KDE using JAX with batching.
+    """
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data = jnp.asarray(data, dtype=jnp.float32)
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    outputs = []
+
+    for i in range(0, len(query), batch_size):
+        q = query[i:i + batch_size]
+        out = _kde_chunk(q, data, inv_sigma2)
+        outputs.append(out)
+
+    return jnp.concatenate(outputs, axis=0)
+
 
 def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
     inv_sigma2 = 1.0 / (sigma ** 2)
@@ -392,7 +425,13 @@ def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
 
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
-    logp = log_kde_anisotropic_batched(gen, D, sigma_D)
+    #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
+    max_ref = 2000
+    if len(D) > max_ref:
+        idx = np.random.choice(len(D), max_ref, replace=False)
+        D = D[idx]
+    logp = log_kde_jax(gen, D, sigma_D)
+    logp = np.asarray(logp)
     mask_keep = logp >= tau
     mask_low = ~mask_keep
     return mask_keep, mask_low, logp
