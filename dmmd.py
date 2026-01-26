@@ -46,7 +46,7 @@ def _kernel_mean_blockwise(x, y, sigma, nx, ny):
     return total / (nx * ny)
 
 
-def dmmd_blockwise(x, y, sigma):
+def dmmd_blockwise_jax(x, y, sigma):
     x_pad, nx = pad_to_block(x, BLOCK_SIZE)
     y_pad, ny = pad_to_block(y, BLOCK_SIZE)
 
