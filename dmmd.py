@@ -11,39 +11,43 @@ def _rbf_block(x, y, sigma):
 
 
 def _block_sum(x, y, sigma, block_size):
-    n = x.shape[0]
+    n, d = x.shape
     m = y.shape[0]
+
+    num_x_blocks = (n + block_size - 1) // block_size
+    num_y_blocks = (m + block_size - 1) // block_size
 
     def outer(i, acc):
         xi = jax.lax.dynamic_slice(
             x,
             (i * block_size, 0),
-            (jnp.minimum(block_size, n - i * block_size), x.shape[1])
+            (block_size, d),
         )
+
+        # mask for valid rows in last block
+        xi_mask = (i * block_size + jnp.arange(block_size)) < n
+        xi_mask = xi_mask[:, None]
 
         def inner(j, acc2):
             yj = jax.lax.dynamic_slice(
                 y,
                 (j * block_size, 0),
-                (jnp.minimum(block_size, m - j * block_size), y.shape[1])
+                (block_size, d),
             )
 
+            yj_mask = (j * block_size + jnp.arange(block_size)) < m
+            yj_mask = yj_mask[None, :]
+
             k = _rbf_block(xi, yj, sigma)
+
+            # mask invalid entries
+            k = k * xi_mask * yj_mask
+
             return acc2 + jnp.sum(k)
 
-        return jax.lax.fori_loop(
-            0,
-            (m + block_size - 1) // block_size,
-            inner,
-            acc,
-        )
+        return jax.lax.fori_loop(0, num_y_blocks, inner, acc)
 
-    return jax.lax.fori_loop(
-        0,
-        (n + block_size - 1) // block_size,
-        outer,
-        0.0,
-    )
+    return jax.lax.fori_loop(0, num_x_blocks, outer, 0.0)
 
 
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
