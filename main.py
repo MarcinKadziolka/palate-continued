@@ -551,10 +551,6 @@ def main():
             )
 
             gen_gt = gen_representations[mask_keep]
-            gen_lt = gen_representations[mask_low]
-
-            f_gt = len(gen_gt) / len(gen_representations)
-            f_lt = len(gen_lt) / len(gen_representations)
 
             t_kde_end = now()
 
@@ -577,30 +573,7 @@ def main():
             # ==============================
             # DMMD
             # ==============================
-            t_dmmd_start = now()
 
-            dmmd_lt, _ = dmmd_blockwise_jax(
-                x=gen_lt,
-                y=D,
-                sigma=args.sigma,
-            )
-
-            dmmd_gt, _ = dmmd_blockwise_jax(
-                x=gen_gt,
-                y=D,
-                sigma=args.sigma,
-            )
-
-            numerator = dmmd_lt * f_lt
-            denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
-            S_dmmd = numerator / denominator if denominator > 0 else 0.0
-
-            t_dmmd_end = now()
-
-            # ==============================
-            # FINAL SCORE
-            # ==============================
-            m_palate = 0.5 * S_dmmd + 0.5 * S_palate
 
             t_total_end = now()
 
@@ -608,23 +581,16 @@ def main():
             # SAVE
             # ==============================
             extra_scores = {
-                "m_palate": float(m_palate),
 
-                # --- metrics ---
-                "dmmd_gen_lt_data": float(dmmd_lt),
-                "dmmd_gen_gt_data": float(dmmd_gt),
-                "dmmd_weighted": float(S_dmmd),
                 "palate_local": float(S_palate),
 
                 # --- KDE ---
-                "gen_low_frac": float(f_lt),
-                "gen_high_frac": float(f_gt),
+
                 "tau": float(tau),
 
                 # --- timing ---
                 "time_kde": t_kde_end - t_kde_start,
                 "time_palate": t_palate_end - t_palate_start,
-                "time_dmmd": t_dmmd_end - t_dmmd_start,
                 "time_total": t_total_end - t_total_start,
                 "samples_per_sec": len(gen_representations) / (t_total_end - t_total_start),
             }
