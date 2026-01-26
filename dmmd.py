@@ -10,27 +10,36 @@ def _rbf_block(x, y, sigma):
     return jnp.exp(-sq / (2.0 * sigma**2))
 
 
-def _pad_to_block(x, block_size):
+def _pad(x, block_size):
     n, d = x.shape
     pad = (-n) % block_size
     return jnp.pad(x, ((0, pad), (0, 0))), n
 
 
 def _block_sum(x, y, sigma, block_size):
-    x, nx = _pad_to_block(x, block_size)
-    y, ny = _pad_to_block(y, block_size)
+    x, nx = _pad(x, block_size)
+    y, ny = _pad(y, block_size)
 
     n_blocks = x.shape[0] // block_size
     m_blocks = y.shape[0] // block_size
+    d = x.shape[1]
 
     def outer(i, acc):
-        xi = x[i * block_size:(i + 1) * block_size]
+        xi = jax.lax.dynamic_slice(
+            x,
+            (i * block_size, 0),
+            (block_size, d),
+        )
 
         xi_mask = (i * block_size + jnp.arange(block_size)) < nx
         xi_mask = xi_mask[:, None]
 
         def inner(j, acc2):
-            yj = y[j * block_size:(j + 1) * block_size]
+            yj = jax.lax.dynamic_slice(
+                y,
+                (j * block_size, 0),
+                (block_size, d),
+            )
 
             yj_mask = (j * block_size + jnp.arange(block_size)) < ny
             yj_mask = yj_mask[None, :]
