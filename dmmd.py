@@ -2,64 +2,76 @@ import jax
 import jax.numpy as jnp
 
 
-@jax.jit
-def _rbf_block(x, y, sigma):
-    x_norm = jnp.sum(x**2, axis=1)[:, None]
-    y_norm = jnp.sum(y**2, axis=1)[None, :]
-    sq = x_norm + y_norm - 2.0 * x @ y.T
-    return jnp.exp(-sq / (2.0 * sigma**2))
-
-
-def _pad(x, block_size):
+# ============================================================
+# Utility: pad to block size (required for JAX correctness)
+# ============================================================
+def pad_to_block(x, block_size):
     n, d = x.shape
     pad = (-n) % block_size
-    return jnp.pad(x, ((0, pad), (0, 0))), n
+    if pad == 0:
+        return x
+    return jnp.pad(x, ((0, pad), (0, 0)))
 
 
-def _block_sum(x, y, sigma, block_size):
-    x, nx = _pad(x, block_size)
-    y, ny = _pad(y, block_size)
+# ============================================================
+# RBF kernel
+# ============================================================
+@jax.jit
+def _rbf_block(x, y, sigma):
+    x2 = jnp.sum(x * x, axis=1)[:, None]
+    y2 = jnp.sum(y * y, axis=1)[None, :]
+    return jnp.exp(-(x2 + y2 - 2.0 * x @ y.T) / (2.0 * sigma**2))
 
-    n_blocks = x.shape[0] // block_size
-    m_blocks = y.shape[0] // block_size
-    d = x.shape[1]
 
-    def outer(i, acc):
-        xi = jax.lax.dynamic_slice(
+# ============================================================
+# Blockwise kernel mean (exact, JIT-safe)
+# ============================================================
+@jax.jit
+def kernel_mean_blockwise(x, y, sigma, block_size):
+    nx = x.shape[0]
+    ny = y.shape[0]
+
+    nbx = nx // block_size
+    nby = ny // block_size
+
+    def body(i, acc):
+        bi = i // nby
+        bj = i % nby
+
+        xb = jax.lax.dynamic_slice(
             x,
-            (i * block_size, 0),
-            (block_size, d),
+            (bi * block_size, 0),
+            (block_size, x.shape[1])
+        )
+        yb = jax.lax.dynamic_slice(
+            y,
+            (bj * block_size, 0),
+            (block_size, y.shape[1])
         )
 
-        xi_mask = (i * block_size + jnp.arange(block_size)) < nx
-        xi_mask = xi_mask[:, None]
+        k = _rbf_block(xb, yb, sigma)
+        return acc + jnp.sum(k)
 
-        def inner(j, acc2):
-            yj = jax.lax.dynamic_slice(
-                y,
-                (j * block_size, 0),
-                (block_size, d),
-            )
+    total = jax.lax.fori_loop(
+        0,
+        nbx * nby,
+        body,
+        0.0
+    )
 
-            yj_mask = (j * block_size + jnp.arange(block_size)) < ny
-            yj_mask = yj_mask[None, :]
-
-            k = _rbf_block(xi, yj, sigma)
-            k = k * xi_mask * yj_mask
-
-            return acc2 + jnp.sum(k)
-
-        return jax.lax.fori_loop(0, m_blocks, inner, acc)
-
-    return jax.lax.fori_loop(0, n_blocks, outer, 0.0)
+    return total / (nx * ny)
 
 
+# ============================================================
+# Exact D-MMD
+# ============================================================
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
-    n = x.shape[0]
-    m = y.shape[0]
+    # Pad ONCE (important!)
+    x = pad_to_block(x, block_size)
+    y = pad_to_block(y, block_size)
 
-    kxx = _block_sum(x, x, sigma, block_size) / (n * n)
-    kyy = _block_sum(y, y, sigma, block_size) / (m * m)
-    kxy = _block_sum(x, y, sigma, block_size) / (n * m)
+    kxx = kernel_mean_blockwise(x, x, sigma, block_size)
+    kyy = kernel_mean_blockwise(y, y, sigma, block_size)
+    kxy = kernel_mean_blockwise(x, y, sigma, block_size)
 
-    return kxx + kyy - 2.0 * kxy, kxx + kyy
+    return kxx + kyy - 2.0 * kxy
