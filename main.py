@@ -494,244 +494,111 @@ def filter_gen_by_global_kde(gen, D, sigma_D, tau):
 
     return mask_keep, mask_low, logp_gen
 
+
 def main():
     logger.info("Starting main function.")
     args: Namespace = parser.parse_args()
     logger.info(f"Arguments: {args}")
-
-    # Sanity check
-    if len(args.path) < 3:
-        raise ValueError(
-            "At least three inputs are required: train, test, and one or more generated."
-        )
-
-    # =============================
-    # NPZ (IMAGE-FREE) MODE
-    # =============================
-    if args.load_npz:
-        train_id = args.path[0]
-        test_id = args.path[1]
-        gen_ids = args.path[2:]
-
-        logger.info("Running in NPZ-only (image-free) mode")
-
-        train_representations = load_reps_from_npz(train_id)
-        test_representations = load_reps_from_npz(test_id)
-
-        logger.info(f"Train reps shape: {train_representations.shape}")
-        logger.info(f"Test reps shape: {test_representations.shape}")
-
-        model = None  # no model in NPZ mode
-
-        # experiment directory
-        exp_dir = args.exp_dir or create_unique_exp_dir()
-        output_experiment_dir = os.path.join(args.output_dir, exp_dir)
-        logger.info(f"Experiment directory: {output_experiment_dir}")
-        write_arguments(args, output_experiment_dir)
-
-        for gen_id in gen_ids:
-            gen_representations = load_reps_from_npz(gen_id)
-
-            t_total_start = now()
-
-            # ==============================
-            # KDE
-            # ==============================
-            t_kde_start = now()
-
-            D = np.vstack([train_representations, test_representations])
-            sigma_D = np.std(D, axis=0).astype(np.float32)
-            tau = float(args.tau)
-
-            mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
-                gen_representations,
-                D,
-                sigma_D,
-                tau,
-            )
-
-            gen_gt = gen_representations[mask_keep]
-
-            t_kde_end = now()
-
-            # ==============================
-            # PALATE
-            # ==============================
-            t_palate_start = now()
-
-            pal_gt = compute_palate(
-                train_representations=train_representations,
-                test_representations=test_representations,
-                gen_representations=gen_gt,
-                sigma=args.sigma,
-            )
-
-            S_palate = pal_gt["palate"]
-
-            t_palate_end = now()
-
-            # ==============================
-            # DMMD
-            # ==============================
-
-
-            t_total_end = now()
-
-            # ==============================
-            # SAVE
-            # ==============================
-            extra_scores = {
-
-                "palate_local": float(S_palate),
-
-                # --- KDE ---
-
-                "tau": float(tau),
-
-                # --- timing ---
-                "time_kde": t_kde_end - t_kde_start,
-                "time_palate": t_palate_end - t_palate_start,
-                "time_total": t_total_end - t_total_start,
-                "samples_per_sec": len(gen_representations) / (t_total_end - t_total_start),
-            }
-
-            save_score(
-                palate_components=pal_gt,
-                output_dir=output_experiment_dir,
-                model=model,
-                train_path=train_id,
-                test_path=test_id,
-                gen_path=gen_id,
-                nsample=train_representations.shape[0],
-                sigma=args.sigma,
-                extra_scores=extra_scores,
-            )
-
-        return  # IMPORTANT: stop here
-
-    # =============================
-    # IMAGE MODE
-    # =============================
     device, num_workers = get_device_and_num_workers(args.device, args.num_workers)
+    if len(args.path) < 3:
+        logger.error(
+            "At least three paths are required: train, test, and one or more generated."
+        )
+        return
 
     train_path = args.path[0]
     test_path = args.path[1]
     gen_paths = args.path[2:]
-
     logger.info(f"Training path: {train_path}")
     logger.info(f"Testing path: {test_path}")
     logger.info(f"Gen paths: {gen_paths}")
 
     model: DinoEncoder = get_model(args, device, args.dino_ckpt)
 
-    exp_dir = args.exp_dir or create_unique_exp_dir()
+    if args.exp_dir:
+        exp_dir = args.exp_dir
+    else:
+        exp_dir = create_unique_exp_dir()
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
+    if args.load_npz:
+        logger.info("Loading representations from NPZ files")
 
-    train_representations = compute_representations(
-        train_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing train representations")
+        train_representations = load_reps_from_npz(train_path)
+        test_representations = load_reps_from_npz(test_path)
+    else:
 
-    test_representations = compute_representations(
-        test_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing test representations")
+        train_representations = compute_representations(
+            train_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing train representations")
+
+        test_representations = compute_representations(
+            test_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing test representations")
+        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
 
     for gen_path in gen_paths:
-        gen_representations = compute_representations(
-            gen_path, model, num_workers, device, args
-        )
 
-        t_total_start = now()
+        if args.load_npz:
+            gen_representations = load_reps_from_npz(gen_path)
+        else:
+            gen_representations = compute_representations(
+                gen_path, model, num_workers, device, args
+            )
 
         # ==============================
-        # KDE
+        # KDE FILTERING (timed)
         # ==============================
-        t_kde_start = now()
+        t0 = time.perf_counter()
 
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
 
-        mask_keep, mask_low, logp_gen = filter_gen_by_global_kde(
-            gen_representations, D, sigma_D, tau
+        mask_keep, mask_low, _ = filter_gen_by_global_kde(
+            gen_representations,
+            D,
+            sigma_D,
+            tau,
         )
 
         gen_gt = gen_representations[mask_keep]
-        gen_lt = gen_representations[mask_low]
 
-        f_gt = len(gen_gt) / len(gen_representations)
-        f_lt = len(gen_lt) / len(gen_representations)
-
-        t_kde_end = now()
+        kde_time = time.perf_counter() - t0
 
         # ==============================
-        # PALATE
+        # PALATE (timed)
         # ==============================
-        t_palate_start = now()
+        t1 = time.perf_counter()
 
-        pal_gt = compute_palate(
+        palate_components = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
-            gen_representations=gen_gt,
+            gen_representations=gen_representations,
+            gen_gt=gen_gt,
             sigma=args.sigma,
         )
 
-        S_palate = pal_gt.palate_metrics.palate
-
-        t_palate_end = now()
-
-        # ==============================
-        # DMMD
-        # ==============================
-        t_dmmd_start = now()
-
-        dmmd_lt, _ = dmmd_blockwise_jax(x=gen_lt, y=D, sigma=args.sigma)
-        dmmd_gt, _ = dmmd_blockwise_jax(x=gen_gt, y=D, sigma=args.sigma)
-
-        numerator = dmmd_lt * f_lt
-        denominator = dmmd_lt * f_lt + dmmd_gt * f_gt
-        S_dmmd = numerator / denominator if denominator > 0 else 0.0
-
-        t_dmmd_end = now()
-
-        # ==============================
-        # FINAL
-        # ==============================
-        m_palate = 0.5 * S_dmmd + 0.5 * S_palate
-        t_total_end = now()
-
-        extra_scores = {
-            "m_palate": float(m_palate),
-            "dmmd_gen_lt_data": float(dmmd_lt),
-            "dmmd_gen_gt_data": float(dmmd_gt),
-            "dmmd_weighted": float(S_dmmd),
-            "gen_low_frac": float(f_lt),
-            "gen_high_frac": float(f_gt),
-            "tau": float(tau),
-            "palate_local": float(S_palate),
-
-            # timing
-            "time_kde": t_kde_end - t_kde_start,
-            "time_palate": t_palate_end - t_palate_start,
-            "time_dmmd": t_dmmd_end - t_dmmd_start,
-            "time_total": t_total_end - t_total_start,
-            "samples_per_sec": len(gen_representations) / (t_total_end - t_total_start),
-        }
+        palate_time = time.perf_counter() - t1
+        total_time = kde_time + palate_time
+        palate_components["time_kde_sec"] = kde_time
+        palate_components["time_palate_sec"] = palate_time
+        palate_components["time_total_sec"] = total_time
 
         save_score(
-            palate_components=pal_gt,
-            output_dir=output_experiment_dir,
-            model=model,
-            train_path=train_path,
-            test_path=test_path,
-            gen_path=gen_path,
-            nsample=args.nsample,
-            sigma=args.sigma,
-            extra_scores=extra_scores,
+            palate_components,
+            output_experiment_dir,
+            model,
+            train_path,
+            test_path,
+            gen_path,
+            args.nsample,
+            args.sigma,
         )
+
 
 if __name__ == "__main__":
     main()
