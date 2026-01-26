@@ -273,7 +273,6 @@ def save_score(
         gen_path,
         nsample,
         sigma,
-        extra_scores,
 ):
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
