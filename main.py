@@ -282,8 +282,7 @@ def save_score(
 
     scores = palate_components
 
-    if extra_scores is not None:
-        scores.update(extra_scores)
+   
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
     write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
