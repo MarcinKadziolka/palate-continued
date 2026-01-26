@@ -14,6 +14,9 @@ from scipy.special import logsumexp
 from jaxlib.xla_client import Array
 import numpy as np
 import torch
+import jax
+import jax.numpy as jnp
+from jax import jit
 from palate_local_knn import compute_local_palate_knn
 from palate_local_knn import compute_global_palate_fast
 from palate_local_knn import compute_global_palate_fast_normalized
