@@ -15,22 +15,20 @@ def _rbf_block(x, y, sigma):
 # Exact blockwise kernel mean
 # ------------------------------------------------------------
 def kernel_mean_blockwise(x, y, sigma, block_size=1024):
-    n, d = x.shape
-    m = y.shape[0]
+    total = jnp.array(0.0)
+    count = jnp.array(0.0)
 
-    total = 0.0
-    count = 0
-
-    for i in range(0, n, block_size):
+    for i in range(0, x.shape[0], block_size):
         xb = x[i:i + block_size]
-        for j in range(0, m, block_size):
+        for j in range(0, y.shape[0], block_size):
             yb = y[j:j + block_size]
 
             k = _rbf_block(xb, yb, sigma)
             total += jnp.sum(k)
-            count += k.size
+            count += jnp.array(k.size, dtype=total.dtype)
 
     return total / count
+
 
 
 # ------------------------------------------------------------
