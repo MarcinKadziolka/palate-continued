@@ -18,7 +18,9 @@ from palate_local_knn import compute_local_palate_knn
 from palate_local_knn import compute_global_palate_fast
 from palate_local_knn import compute_global_palate_fast_normalized
 from palate_local_knn import compute_global_palate_fast_anisotropic
-
+import jax
+import jax.numpy as jnp
+from jax import jit
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
