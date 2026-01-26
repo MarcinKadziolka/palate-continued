@@ -566,7 +566,7 @@ def main():
                 sigma=args.sigma,
             )
 
-            S_palate = pal_gt.palate_metrics.palate
+            S_palate = pal_gt["palate"]
 
             t_palate_end = now()
 
