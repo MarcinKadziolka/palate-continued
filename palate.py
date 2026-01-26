@@ -51,7 +51,7 @@ def compute_palate(
 
     dmmd_test_gen_3, _ = dmmd_blockwise_jax(
         x=test_representations,
-        y=gen_representations,
+        y=gen_gt,
         sigma=sigma3,
     )
 
