@@ -282,7 +282,7 @@ def save_score(
 
     scores = palate_components
 
-   
+
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
     write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
@@ -435,6 +435,39 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
             f.write(f"{arg}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
 
+from scipy.special import logsumexp
+
+@jit
+def _kde_chunk(query, data, inv_sigma2):
+    """
+    query: [B, D]
+    data:  [N, D]
+    """
+    q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
+    cross = (query * inv_sigma2) @ data.T
+
+    dist = q_norm + d_norm - 2.0 * cross
+    return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+
+def log_kde_jax(query, data, sigma, batch_size=1024):
+    """
+    Fast KDE using JAX with batching.
+    """
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data = jnp.asarray(data, dtype=jnp.float32)
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    outputs = []
+
+    for i in range(0, len(query), batch_size):
+        q = query[i:i + batch_size]
+        out = _kde_chunk(q, data, inv_sigma2)
+        outputs.append(out)
+
+    return jnp.concatenate(outputs, axis=0)
+
+
 def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
     inv_sigma2 = 1.0 / (sigma ** 2)
     data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
@@ -443,54 +476,27 @@ def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
 
     for i in range(0, len(query), batch_size):
         q = query[i:i + batch_size]
-
         q_norm = np.sum(q ** 2 * inv_sigma2, axis=1)[:, None]
         cross = (q * inv_sigma2) @ data.T
         d = q_norm + data_norm[None, :] - 2.0 * cross
-
-        out[i:i + batch_size] = (
-            logsumexp(-0.5 * d, axis=1) - np.log(len(data))
-        )
+        out[i:i + batch_size] = logsumexp(-0.5 * d, axis=1) - np.log(len(data))
 
     return out
 
-def log_kde_anisotropic(query, data, sigma):
-    inv_sigma2 = 1.0 / (sigma ** 2)
-
-    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
-    query_norm = np.sum(query ** 2 * inv_sigma2, axis=1)[:, None]
-
-    cross = (query * inv_sigma2) @ data.T
-    d = query_norm + data_norm[None, :] - 2.0 * cross
-
-    return logsumexp(-0.5 * d, axis=1) - np.log(len(data))
-
-def compute_global_kde_threshold(train, test, percentile=0.001):
-    """
-    KDE₁ on real data only (train + test)
-    Returns: tau, sigma_D
-    """
-    D = np.vstack([train, test]).astype(np.float32)
-
-    sigma_D = np.std(D, axis=0).astype(np.float32)
-
-    logp_D = log_kde_anisotropic_batched(D, D, sigma_D, batch_size=500)
-
-    k = int(len(logp_D) * percentile / 100.0)
-    idx = np.argpartition(logp_D, k)[:k]
-
-    tau = logp_D[idx].max()
-    #tau = logp_D.min()
-
-    return tau, sigma_D
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
-    logp_gen = log_kde_anisotropic_batched(gen, D, sigma_D, batch_size=500)
+    #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
+    max_ref = 2000
+    if len(D) > max_ref:
+        idx = np.random.choice(len(D), max_ref, replace=False)
+        D = D[idx]
+    logp = log_kde_jax(gen, D, sigma_D)
+    logp = np.asarray(logp)
+    mask_keep = logp >= tau
+    mask_low = ~mask_keep
+    return mask_keep, mask_low, logp
 
-    mask_keep = logp_gen >= tau
-    mask_low  = ~mask_keep
 
-    return mask_keep, mask_low, logp_gen
 
 
 def main():
