@@ -15,41 +15,38 @@ def _block_sum(x, y, sigma, block_size):
     m = y.shape[0]
 
     def outer(i, acc):
-        xi = x[i:i + block_size]
+        xi = jax.lax.dynamic_slice(
+            x,
+            (i * block_size, 0),
+            (jnp.minimum(block_size, n - i * block_size), x.shape[1])
+        )
 
         def inner(j, acc2):
-            yj = y[j:j + block_size]
+            yj = jax.lax.dynamic_slice(
+                y,
+                (j * block_size, 0),
+                (jnp.minimum(block_size, m - j * block_size), y.shape[1])
+            )
+
             k = _rbf_block(xi, yj, sigma)
             return acc2 + jnp.sum(k)
 
-        acc = jax.lax.fori_loop(
-            0, (m + block_size - 1) // block_size,
+        return jax.lax.fori_loop(
+            0,
+            (m + block_size - 1) // block_size,
             inner,
             acc,
         )
-        return acc
 
     return jax.lax.fori_loop(
-        0, (n + block_size - 1) // block_size,
+        0,
+        (n + block_size - 1) // block_size,
         outer,
         0.0,
     )
 
 
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
-    """
-    Memory-efficient MMD^2 with RBF kernel.
-
-    Args:
-        x: [N, D]
-        y: [M, D]
-        sigma: RBF bandwidth
-        block_size: block size for computation
-
-    Returns:
-        mmd2, kxx_plus_kyy
-    """
-
     n = x.shape[0]
     m = y.shape[0]
 
