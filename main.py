@@ -23,7 +23,7 @@ from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
-from palate import compute_palate, PalateComponents, flatten_dataclass
+from palate import compute_palate
 from representations import get_representations
 from dmmd import dmmd_blockwise_jax
 
@@ -281,7 +281,7 @@ def save_score(
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    scores = flatten_dataclass(palate_components)
+    scores = palate_components
 
     if extra_scores is not None:
         scores.update(extra_scores)
