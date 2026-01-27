@@ -53,11 +53,11 @@ def compute_palate(
     gen_p = prepare(gen_representations, 1024)
     gt_p = prepare(gen_gt, 1024)
 
-    dmmd_train_gen = dmmd_blockwise_jax(*train_p, *gen_p, sigma, 1024)
-    dmmd_test_gen = dmmd_blockwise_jax(*test_p, *gen_p, sigma, 1024)
+    dmmd_train_gen = dmmd_blockwise_jax(*train_p, *gen_p, sigma)
+    dmmd_test_gen = dmmd_blockwise_jax(*test_p, *gen_p, sigma)
 
-    dmmd_train_gen_3 = dmmd_blockwise_jax(*train_p, *gt_p, sigma3, 1024)
-    dmmd_test_gen_3 = dmmd_blockwise_jax(*test_p, *gt_p, sigma3, 1024)
+    dmmd_train_gen_3 = dmmd_blockwise_jax(*train_p, *gt_p, sigma3)
+    dmmd_test_gen_3 = dmmd_blockwise_jax(*test_p, *gt_p, sigma3)
     '''
     dmmd_train_gen, _ = dmmd_blockwise_jax(
         x=train_representations,
