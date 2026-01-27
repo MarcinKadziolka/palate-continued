@@ -3,6 +3,16 @@ import jax.numpy as jnp
 from jax import lax
 
 
+# ------------------------------------------------------------
+# Utilities
+# ------------------------------------------------------------
+def pad_to_block(x, block_size):
+    n, d = x.shape
+    pad = (-n) % block_size
+    x_pad = jnp.pad(x, ((0, pad), (0, 0)))
+    return x_pad, n
+
+
 @jax.jit
 def _rbf_block(x, y, x2, y2, sigma):
     return jnp.exp(
@@ -11,9 +21,15 @@ def _rbf_block(x, y, x2, y2, sigma):
     )
 
 
+# ------------------------------------------------------------
+# Blockwise kernel mean (exact)
+# ------------------------------------------------------------
 def kernel_mean_blockwise(x, y, sigma, block_size=1024):
-    n, d = x.shape
-    m = y.shape[0]
+    x, nx = pad_to_block(x, block_size)
+    y, ny = pad_to_block(y, block_size)
+
+    n_blocks_x = x.shape[0] // block_size
+    n_blocks_y = y.shape[0] // block_size
 
     x2 = jnp.sum(x * x, axis=1)
     y2 = jnp.sum(y * y, axis=1)
@@ -21,41 +37,45 @@ def kernel_mean_blockwise(x, y, sigma, block_size=1024):
     def outer_loop(i, acc):
         total, count = acc
 
-        xb = lax.dynamic_slice(x, (i, 0), (block_size, d))
-        x2b = lax.dynamic_slice(x2, (i,), (block_size,))
+        xb = lax.dynamic_slice(
+            x, (i * block_size, 0), (block_size, x.shape[1])
+        )
+        x2b = lax.dynamic_slice(
+            x2, (i * block_size,), (block_size,)
+        )
 
-        def inner_loop(j, inner_acc):
-            total_inner, count_inner = inner_acc
+        def inner_loop(j, acc2):
+            total2, count2 = acc2
 
-            yb = lax.dynamic_slice(y, (j, 0), (block_size, d))
-            y2b = lax.dynamic_slice(y2, (j,), (block_size,))
+            yb = lax.dynamic_slice(
+                y, (j * block_size, 0), (block_size, y.shape[1])
+            )
+            y2b = lax.dynamic_slice(
+                y2, (j * block_size,), (block_size,)
+            )
 
             k = _rbf_block(xb, yb, x2b, y2b, sigma)
 
             return (
-                total_inner + jnp.sum(k),
-                count_inner + k.size,
+                total2 + jnp.sum(k),
+                count2 + k.size,
             )
 
-        total, count = lax.fori_loop(
-            0,
-            (m + block_size - 1) // block_size,
-            lambda j, acc: inner_loop(j * block_size, acc),
-            (total, count),
+        return lax.fori_loop(
+            0, n_blocks_y, inner_loop, (total, count)
         )
 
-        return total, count
-
     total, count = lax.fori_loop(
-        0,
-        (n + block_size - 1) // block_size,
-        lambda i, acc: outer_loop(i * block_size, acc),
-        (0.0, 0.0),
+        0, n_blocks_x, outer_loop, (0.0, 0.0)
     )
 
-    return total / count
+    # Important: divide by true number of pairs
+    return total / (nx * ny)
 
 
+# ------------------------------------------------------------
+# MMD
+# ------------------------------------------------------------
 @jax.jit
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
