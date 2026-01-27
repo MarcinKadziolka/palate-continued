@@ -519,6 +519,22 @@ def log_kde_exact(query, data, sigma, batch_size=1024):
 
     return out.reshape(-1)[:len(query)] - jnp.log(N)
 
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+
+@jax.jit
+def log_kde_fast(query, data, sigma):
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
+
+    cross = (query * inv_sigma2) @ data.T
+    dist = q_norm + d_norm - 2.0 * cross
+
+    return logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+
 
 def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
     inv_sigma2 = 1.0 / (sigma ** 2)
@@ -538,7 +554,7 @@ def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
     #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
-    logp = log_kde_jax(gen, D, sigma_D)
+    logp = log_kde_fast(gen, D, sigma_D)
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     mask_low = ~mask_keep
