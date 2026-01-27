@@ -538,7 +538,7 @@ def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
     #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
-    logp = log_kde_exact(gen, D, sigma_D)
+    logp = log_kde_jax(gen, D, sigma_D)
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     mask_low = ~mask_keep
