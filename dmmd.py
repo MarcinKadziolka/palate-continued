@@ -121,5 +121,5 @@ def dmmd_blockwise_jax(xp, x2, xm, nx,
     kyy = kernel_mean_precomputed(yp, y2, ym, yp, y2, ym, sigma) / (ny * ny)
     kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma) / (nx * ny)
 
-    return kxx + kyy - 2 * kxy
+    return kxx + kyy - 2.0 * kxy, kxx + kyy
 
