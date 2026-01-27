@@ -4,19 +4,16 @@ from jax import lax
 
 
 # ------------------------------------------------------------
-# Padding utilities
+# Utilities
 # ------------------------------------------------------------
 def pad_to_block(x, block_size):
     n, d = x.shape
     pad = (-n) % block_size
-    x_pad = jnp.pad(x, ((0, pad), (0, 0)))
+    x = jnp.pad(x, ((0, pad), (0, 0)))
     mask = jnp.arange(n + pad) < n
-    return x_pad, mask, n
+    return x, mask, n
 
 
-# ------------------------------------------------------------
-# RBF kernel block
-# ------------------------------------------------------------
 @jax.jit
 def _rbf_block(x, y, x2, y2, sigma):
     return jnp.exp(
@@ -26,53 +23,55 @@ def _rbf_block(x, y, x2, y2, sigma):
 
 
 # ------------------------------------------------------------
-# Exact blockwise kernel mean (SAFE)
+# Kernel mean (exact, masked, symmetric)
 # ------------------------------------------------------------
-def kernel_mean_blockwise(x, y, sigma, block_size=1024):
-    # Pad inputs
-    x, xmask, nx = pad_to_block(x, block_size)
-    y, ymask, ny = pad_to_block(y, block_size)
+def kernel_mean_blockwise(x, y, sigma, block_size=1024, symmetric=False):
+    x, xm, nx = pad_to_block(x, block_size)
+    y, ym, ny = pad_to_block(y, block_size)
 
-    n_blocks_x = x.shape[0] // block_size
-    n_blocks_y = y.shape[0] // block_size
+    nbx = x.shape[0] // block_size
+    nby = y.shape[0] // block_size
 
     x2 = jnp.sum(x * x, axis=1)
     y2 = jnp.sum(y * y, axis=1)
 
-    def outer_loop(i, total):
-        xb = lax.dynamic_slice(x, (i * block_size, 0),
-                               (block_size, x.shape[1]))
+    def outer(i, acc):
+        xb = lax.dynamic_slice(x, (i * block_size, 0), (block_size, x.shape[1]))
         x2b = lax.dynamic_slice(x2, (i * block_size,), (block_size,))
-        xm = lax.dynamic_slice(xmask, (i * block_size,), (block_size,))
+        xm_b = lax.dynamic_slice(xm, (i * block_size,), (block_size,))
 
-        def inner_loop(j, subtotal):
-            yb = lax.dynamic_slice(y, (j * block_size, 0),
-                                   (block_size, y.shape[1]))
+        def inner(j, acc2):
+            yb = lax.dynamic_slice(y, (j * block_size, 0), (block_size, y.shape[1]))
             y2b = lax.dynamic_slice(y2, (j * block_size,), (block_size,))
-            ym = lax.dynamic_slice(ymask, (j * block_size,), (block_size,))
+            ym_b = lax.dynamic_slice(ym, (j * block_size,), (block_size,))
 
             k = _rbf_block(xb, yb, x2b, y2b, sigma)
 
-            # Mask padded rows
-            mask = xm[:, None] & ym[None, :]
+            mask = xm_b[:, None] & ym_b[None, :]
             k = jnp.where(mask, k, 0.0)
 
-            return subtotal + jnp.sum(k)
+            # symmetry handling
+            factor = jnp.where(
+                (symmetric & (i != j)), 2.0, 1.0
+            )
 
-        return lax.fori_loop(0, n_blocks_y, inner_loop, total)
+            return acc2 + factor * jnp.sum(k)
 
-    total = lax.fori_loop(0, n_blocks_x, outer_loop, 0.0)
+        j0 = i if symmetric else 0
+        return lax.fori_loop(j0, nby, inner, acc)
 
-    # Correct normalization
-    return total / (nx * ny)
+    total = lax.fori_loop(0, nbx, outer, 0.0)
+
+    denom = nx * ny
+    return total / denom
 
 
 # ------------------------------------------------------------
-# MMD
+# MMD (fast + exact)
 # ------------------------------------------------------------
 @jax.jit
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
-    kxx = kernel_mean_blockwise(x, x, sigma, block_size)
-    kyy = kernel_mean_blockwise(y, y, sigma, block_size)
-    kxy = kernel_mean_blockwise(x, y, sigma, block_size)
+    kxx = kernel_mean_blockwise(x, x, sigma, block_size, symmetric=True)
+    kyy = kernel_mean_blockwise(y, y, sigma, block_size, symmetric=True)
+    kxy = kernel_mean_blockwise(x, y, sigma, block_size, symmetric=False)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
