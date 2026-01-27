@@ -535,30 +535,19 @@ def log_kde_fast(query, data, sigma):
 
     return logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
 
-
-def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
-    inv_sigma2 = 1.0 / (sigma ** 2)
-    data_norm = np.sum(data ** 2 * inv_sigma2, axis=1)
-
-    out = np.empty(len(query), dtype=np.float32)
-
-    for i in range(0, len(query), batch_size):
-        q = query[i:i + batch_size]
-        q_norm = np.sum(q ** 2 * inv_sigma2, axis=1)[:, None]
-        cross = (q * inv_sigma2) @ data.T
-        d = q_norm + data_norm[None, :] - 2.0 * cross
-        out[i:i + batch_size] = logsumexp(-0.5 * d, axis=1) - np.log(len(data))
-
-    return out
+def use_fast_kde(n_query, n_data):
+    return (n_query * n_data) <= 400_000_000
 
 
-def filter_gen_by_global_kde(gen, D, sigma_D, tau):
-    #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
-    logp = log_kde_fast(gen, D, sigma_D)
+def filter_gen_by_global_kde(gen, D, sigma, tau):
+    if use_fast_kde(len(gen), len(D)):
+        logp = log_kde_jax(gen, D, sigma)
+    else:
+        logp = log_kde_jax(gen, D, sigma)
+
     logp = np.asarray(logp)
     mask_keep = logp >= tau
-    mask_low = ~mask_keep
-    return mask_keep, mask_low, logp
+    return mask_keep, ~mask_keep, logp
 
 
 

@@ -70,7 +70,7 @@ def kernel_mean_blockwise(x, y, sigma, block_size=1024):
 # ------------------------------------------------------------
 # MMD
 # ------------------------------------------------------------
-'''
+
 @jax.jit
 def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
@@ -122,4 +122,4 @@ def dmmd_blockwise_jax(xp, x2, xm, nx,
     kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma) / (nx * ny)
 
     return kxx + kyy - 2.0 * kxy, kxx + kyy
-
+'''

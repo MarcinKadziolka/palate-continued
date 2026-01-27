@@ -46,13 +46,13 @@ def compute_palate(
     logger.info("Computing DMMD values...")
     t0 = time.time()
     sigma3 = sigma / 3
-
+    '''
     # Precompute once
     train_p = prepare(train_representations, 1024)
     test_p = prepare(test_representations, 1024)
     gen_p = prepare(gen_representations, 1024)
     gt_p = prepare(gen_gt, 1024)
-
+    
     dmmd_train_gen, _ = dmmd_blockwise_jax(*train_p, *gen_p, sigma)
     dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(*test_p, *gen_p, sigma)
 
@@ -82,7 +82,7 @@ def compute_palate(
         y=gen_gt,
         sigma=sigma3,
     )
-    '''
+
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
     # ---- Palate formulas ----
