@@ -468,6 +468,57 @@ def log_kde_jax(query, data, sigma, batch_size=1024):
 
     return jnp.concatenate(outputs, axis=0)
 
+import jax
+import jax.numpy as jnp
+from jax import lax
+from jax.scipy.special import logsumexp
+
+
+@jax.jit
+def _kde_block(query, data, inv_sigma2):
+    """
+    Computes:
+        logsumexp(-0.5 * ||q - x||^2)
+    for a block of query points.
+    """
+    q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
+    cross  = (query * inv_sigma2) @ data.T
+
+    dist = q_norm + d_norm - 2.0 * cross
+    return logsumexp(-0.5 * dist, axis=1)
+
+
+def log_kde_exact(query, data, sigma, batch_size=1024):
+    """
+    Exact KDE:
+        log p(x) = log(1/N * sum_j exp(-||x - y_j||^2 / 2σ²))
+
+    No approximation, no padding bias, numerically stable.
+    """
+
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data  = jnp.asarray(data,  dtype=jnp.float32)
+
+    inv_sigma2 = 1.0 / (sigma ** 2)
+    N = data.shape[0]
+
+    n_blocks = (len(query) + batch_size - 1) // batch_size
+    out = jnp.zeros((n_blocks, batch_size), dtype=jnp.float32)
+
+    def body(i, out):
+        q = lax.dynamic_slice(
+            query,
+            (i * batch_size, 0),
+            (batch_size, query.shape[1])
+        )
+        logsum = _kde_block(q, data, inv_sigma2)
+        return out.at[i].set(logsum)
+
+    out = lax.fori_loop(0, n_blocks, body, out)
+
+    return out.reshape(-1)[:len(query)] - jnp.log(N)
+
 
 def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
     inv_sigma2 = 1.0 / (sigma ** 2)
@@ -487,7 +538,7 @@ def log_kde_anisotropic_batched(query, data, sigma, batch_size=500):
 
 def filter_gen_by_global_kde(gen, D, sigma_D, tau):
     #logp = log_kde_anisotropic_batched(gen, D, sigma_D)
-    logp = log_kde_jax(gen, D, sigma_D)
+    logp = log_kde_exact(gen, D, sigma_D)
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     mask_low = ~mask_keep
