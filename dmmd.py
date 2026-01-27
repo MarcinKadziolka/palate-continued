@@ -78,29 +78,25 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
 '''
-@jax.jit(static_argnames=("block_size",))
-def kernel_mean_precomputed(x, x2, xm,
-                            y, y2, ym,
-                            sigma, block_size):
+BLOCK_SIZE = 1024
 
-    nbx = x.shape[0] // block_size
-    nby = y.shape[0] // block_size
+@jax.jit
+def kernel_mean_precomputed(x, x2, xm, y, y2, ym, sigma):
+
+    nbx = x.shape[0] // BLOCK_SIZE
+    nby = y.shape[0] // BLOCK_SIZE
 
     def outer(i, acc):
-        xb = lax.dynamic_slice(
-            x, (i * block_size, 0),
-            (block_size, x.shape[1])
-        )
-        x2b = lax.dynamic_slice(x2, (i * block_size,), (block_size,))
-        xm_b = lax.dynamic_slice(xm, (i * block_size,), (block_size,))
+        xb = lax.dynamic_slice(x, (i * BLOCK_SIZE, 0),
+                                (BLOCK_SIZE, x.shape[1]))
+        x2b = lax.dynamic_slice(x2, (i * BLOCK_SIZE,), (BLOCK_SIZE,))
+        xm_b = lax.dynamic_slice(xm, (i * BLOCK_SIZE,), (BLOCK_SIZE,))
 
         def inner(j, acc2):
-            yb = lax.dynamic_slice(
-                y, (j * block_size, 0),
-                (block_size, y.shape[1])
-            )
-            y2b = lax.dynamic_slice(y2, (j * block_size,), (block_size,))
-            ym_b = lax.dynamic_slice(ym, (j * block_size,), (block_size,))
+            yb = lax.dynamic_slice(y, (j * BLOCK_SIZE, 0),
+                                    (BLOCK_SIZE, y.shape[1]))
+            y2b = lax.dynamic_slice(y2, (j * BLOCK_SIZE,), (BLOCK_SIZE,))
+            ym_b = lax.dynamic_slice(ym, (j * BLOCK_SIZE,), (BLOCK_SIZE,))
 
             k = jnp.exp(
                 -(x2b[:, None] + y2b[None, :] - 2 * xb @ yb.T)
@@ -115,13 +111,15 @@ def kernel_mean_precomputed(x, x2, xm,
     return lax.fori_loop(0, nbx, outer, 0.0)
 
 
+
 @jax.jit
 def dmmd_blockwise_jax(xp, x2, xm, nx,
-              yp, y2, ym, ny,
-              sigma, block_size):
+                       yp, y2, ym, ny,
+                       sigma):
 
-    kxx = kernel_mean_precomputed(xp, x2, xm, xp, x2, xm, sigma, block_size) / (nx * nx)
-    kyy = kernel_mean_precomputed(yp, y2, ym, yp, y2, ym, sigma, block_size) / (ny * ny)
-    kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma, block_size) / (nx * ny)
+    kxx = kernel_mean_precomputed(xp, x2, xm, xp, x2, xm, sigma) / (nx * nx)
+    kyy = kernel_mean_precomputed(yp, y2, ym, yp, y2, ym, sigma) / (ny * ny)
+    kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma) / (nx * ny)
 
     return kxx + kyy - 2 * kxy
+
