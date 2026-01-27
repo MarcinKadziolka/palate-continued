@@ -78,20 +78,29 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
 '''
-@jax.jit
-def kernel_mean_precomputed(x, x2, xm, y, y2, ym, sigma, block_size):
+@jax.jit(static_argnames=("block_size",))
+def kernel_mean_precomputed(x, x2, xm,
+                            y, y2, ym,
+                            sigma, block_size):
+
     nbx = x.shape[0] // block_size
     nby = y.shape[0] // block_size
 
     def outer(i, acc):
-        xb = lax.dynamic_slice(x, (i*block_size, 0), (block_size, x.shape[1]))
-        x2b = lax.dynamic_slice(x2, (i*block_size,), (block_size,))
-        xm_b = lax.dynamic_slice(xm, (i*block_size,), (block_size,))
+        xb = lax.dynamic_slice(
+            x, (i * block_size, 0),
+            (block_size, x.shape[1])
+        )
+        x2b = lax.dynamic_slice(x2, (i * block_size,), (block_size,))
+        xm_b = lax.dynamic_slice(xm, (i * block_size,), (block_size,))
 
         def inner(j, acc2):
-            yb = lax.dynamic_slice(y, (j*block_size, 0), (block_size, y.shape[1]))
-            y2b = lax.dynamic_slice(y2, (j*block_size,), (block_size,))
-            ym_b = lax.dynamic_slice(ym, (j*block_size,), (block_size,))
+            yb = lax.dynamic_slice(
+                y, (j * block_size, 0),
+                (block_size, y.shape[1])
+            )
+            y2b = lax.dynamic_slice(y2, (j * block_size,), (block_size,))
+            ym_b = lax.dynamic_slice(ym, (j * block_size,), (block_size,))
 
             k = jnp.exp(
                 -(x2b[:, None] + y2b[None, :] - 2 * xb @ yb.T)
@@ -103,8 +112,8 @@ def kernel_mean_precomputed(x, x2, xm, y, y2, ym, sigma, block_size):
 
         return lax.fori_loop(0, nby, inner, acc)
 
-    total = lax.fori_loop(0, nbx, outer, 0.0)
-    return total
+    return lax.fori_loop(0, nbx, outer, 0.0)
+
 
 @jax.jit
 def dmmd_blockwise_jax(xp, x2, xm, nx,
