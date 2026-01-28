@@ -88,7 +88,7 @@ def compute_palate(
 
     # ---- Palate formulas ----
     palate = dmmd_test_gen_3 / (dmmd_test_gen_3 + dmmd_train_gen_3)
-    m_palate = dmmd_test_gen / (2 * denominator_scale) + 0.5 * palate
+    m_palate = (1-fraction) * dmmd_test_gen / denominator_scale + fraction * palate
 
     logger.info(
         "Palate computed (m_palate=%.6f, palate=%.6f)",
