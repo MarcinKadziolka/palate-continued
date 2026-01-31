@@ -841,67 +841,77 @@ def main():
         )
         logger.info("Finished loading/computing test representations")
         logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+    # ONCE ONLY
+    t0 = time.perf_counter()
 
-    for gen_path in gen_paths:
+    D = np.vstack([train_representations, test_representations])
+    D = jnp.asarray(D, dtype=jnp.float16)
 
-        if args.load_npz:
-            gen_representations = load_reps_from_npz(gen_path)
-        else:
-            gen_representations = compute_representations(
-                gen_path, model, num_workers, device, args
-            )
-
-        # ==============================
-        # KDE FILTERING (timed)
-        # ==============================
-        t0 = time.perf_counter()
-
-        D = np.vstack([train_representations, test_representations])
-        sigma_D = np.std(D, axis=0).astype(np.float32)
-
-        tau = float(args.tau)
-
-        mask_keep, mask_low, _ = filter_gen_by_global_kde(
-            gen_representations,
-            D,
-            sigma_D,
-            tau,
+    sigma_D = np.std(D, axis=0).astype(np.float32)
+    inv_sigma = jnp.asarray(1.0 / (sigma_D ** 2), dtype=jnp.float16)
+    if args.load_npz:
+        gen_representations = load_reps_from_npz(gen_path)
+    else:
+        gen_representations = compute_representations(
+            gen_path, model, num_workers, device, args
         )
+    # Warmup JIT
+    _ = filter_gen_by_global_kde(
+        gen_representations[:8],
+        D,
+        inv_sigma,
+        args.tau
+    )
+    jax.block_until_ready(_)
 
-        gen_gt = gen_representations[mask_keep]
 
-        kde_time = time.perf_counter() - t0
+    # ==============================
+    # KDE FILTERING (timed)
+    # ==============================
 
-        # ==============================
-        # PALATE (timed)
-        # ==============================
-        t1 = time.perf_counter()
+    tau = float(args.tau)
 
-        palate_components = compute_palate(
-            train_representations=train_representations,
-            test_representations=test_representations,
-            gen_representations=gen_representations,
-            gen_gt=gen_gt,
-            sigma=args.sigma,
-        )
+    mask_keep, _, _ = filter_gen_by_global_kde(
+        gen_representations,
+        D,
+        inv_sigma,
+        tau,
+    )
 
-        palate_time = time.perf_counter() - t1
-        total_time = kde_time + palate_time
-        palate_components["time_kde_sec"] = kde_time
-        palate_components["time_palate_sec"] = palate_time
-        palate_components["time_total_sec"] = total_time
-        print(kde_time, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
+    gen_gt = gen_representations[mask_keep]
+    jax.block_until_ready(mask_keep)
+    kde_time = time.perf_counter() - t0
 
-        save_score(
-            palate_components,
-            output_experiment_dir,
-            model,
-            train_path,
-            test_path,
-            gen_path,
-            args.nsample,
-            args.sigma,
-        )
+    # ==============================
+    # PALATE (timed)
+    # ==============================
+    t1 = time.perf_counter()
+
+    palate_components = compute_palate(
+        train_representations=train_representations,
+        test_representations=test_representations,
+        gen_representations=gen_representations,
+        gen_gt=gen_gt,
+        sigma=args.sigma,
+    )
+
+    palate_time = time.perf_counter() - t1
+    total_time = kde_time + palate_time
+    palate_components["time_kde_sec"] = kde_time
+    palate_components["time_palate_sec"] = palate_time
+    palate_components["time_total_sec"] = total_time
+    print(kde_time, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
+
+    save_score(
+        palate_components,
+        output_experiment_dir,
+        model,
+        train_path,
+        test_path,
+        gen_path,
+        args.nsample,
+        args.sigma,
+    )
 
 
 if __name__ == "__main__":
