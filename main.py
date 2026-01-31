@@ -438,35 +438,31 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
 
 from scipy.special import logsumexp
 
-@jit
+@jax.jit
 def _kde_chunk(query, data, inv_sigma2):
-    """
-    query: [B, D]
-    data:  [N, D]
-    """
     q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
     d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
     cross = (query * inv_sigma2) @ data.T
+    return jax.scipy.special.logsumexp(
+        -0.5 * (q_norm + d_norm - 2.0 * cross),
+        axis=1
+    )
 
-    dist = q_norm + d_norm - 2.0 * cross
-    return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
 
 def log_kde_jax(query, data, sigma, batch_size=1024):
-    """
-    Fast KDE using JAX with batching.
-    """
     query = jnp.asarray(query, dtype=jnp.float32)
-    data = jnp.asarray(data, dtype=jnp.float32)
-    inv_sigma2 = 1.0 / (sigma ** 2)
+    data  = jnp.asarray(data, dtype=jnp.float32)
 
-    outputs = []
+    inv_sigma2 = jnp.asarray(1.0 / (sigma ** 2), dtype=jnp.float32)
+    logN = jnp.log(data.shape[0])
 
+    outs = []
     for i in range(0, len(query), batch_size):
         q = query[i:i + batch_size]
-        out = _kde_chunk(q, data, inv_sigma2)
-        outputs.append(out)
+        outs.append(_kde_chunk(q, data, inv_sigma2))
 
-    return jnp.concatenate(outputs, axis=0)
+    return jnp.concatenate(outs) - logN
+
 
 import jax
 import jax.numpy as jnp
@@ -523,6 +519,8 @@ import jax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
+
+
 @jax.jit
 def log_kde_fast(query, data, sigma):
     inv_sigma2 = 1.0 / (sigma ** 2)
@@ -537,13 +535,52 @@ def log_kde_fast(query, data, sigma):
 
 def use_fast_kde(n_query, n_data):
     return (n_query * n_data) <= 400_000_000
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
 
 
-def filter_gen_by_global_kde(gen, D, sigma, tau):
-    if use_fast_kde(len(gen), len(D)):
-        logp = log_kde_jax(gen, D, sigma)
-    else:
-        logp = log_kde_jax(gen, D, sigma)
+@jax.jit
+def _kde_block(query, data, d_norm, inv_sigma2):
+    """
+    query: [B, D]
+    data:  [N, D]
+    d_norm: [N]
+    inv_sigma2: [D]
+    """
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+    cross = (query * inv_sigma2) @ data.T
+    return logsumexp(-0.5 * (q_norm + d_norm - 2.0 * cross), axis=1)
+
+
+def log_kde_fast_exact(query, data, sigma, batch_size=1024):
+    """
+    Fast, exact KDE.
+    Numerically identical to naive implementation.
+    """
+
+    # ---- move to device once ----
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data  = jnp.asarray(data,  dtype=jnp.float32)
+
+    inv_sigma2 = jnp.asarray(1.0 / (sigma ** 2), dtype=jnp.float32)
+
+    # ---- precompute constants ----
+    d_norm = jnp.sum(data * data * inv_sigma2, axis=1)
+    logN = jnp.log(data.shape[0])
+
+    # ---- chunked evaluation ----
+    outs = []
+    for i in range(0, query.shape[0], batch_size):
+        q = query[i:i + batch_size]
+        out = _kde_block(q, data, d_norm, inv_sigma2)
+        outs.append(out)
+
+    return jnp.concatenate(outs) - logN
+
+
+def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
+    logp = log_kde_fast_exact(gen, D, inv_sigma)
 
     logp = np.asarray(logp)
     mask_keep = logp >= tau
@@ -612,6 +649,7 @@ def main():
 
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
+
         tau = float(args.tau)
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
@@ -643,6 +681,7 @@ def main():
         palate_components["time_kde_sec"] = kde_time
         palate_components["time_palate_sec"] = palate_time
         palate_components["time_total_sec"] = total_time
+        print(kde_time, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
 
         save_score(
             palate_components,
