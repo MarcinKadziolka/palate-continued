@@ -751,48 +751,51 @@ from jax.scipy.special import logsumexp
 
 BLOCK = 4096  # fixed
 
-
 @jax.jit
-def fast_reject(query, data, inv_sigma2, tau):
-    q_scaled = query * inv_sigma2
-    q_norm = jnp.sum(query * q_scaled, axis=1, keepdims=True)
+def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
+    Q = query.shape[0]
+    N = data.shape[0]
 
-    cross = q_scaled @ data.T
-    d_norm = jnp.sum(data * data * inv_sigma2, axis=1)
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
 
-    max_kernel = jnp.max(
-        -0.5 * (q_norm + d_norm - 2 * cross),
-        axis=1
-    )
+    n_blocks = (N + block_size - 1) // block_size
 
-    return max_kernel + jnp.log(data.shape[0]) >= tau
+    def body(i, state):
+        acc = state
 
+        d = jax.lax.dynamic_slice(
+            data,
+            (i * block_size, 0),
+            (block_size, data.shape[1]),
+        )
+
+        d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
+        cross = (query * inv_sigma2) @ d.T
+
+        contrib = logsumexp(
+            -0.5 * (q_norm + d_norm - 2 * cross),
+            axis=1,
+        )
+
+        acc = jnp.logaddexp(acc, contrib)
+        return acc
+
+    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
+    return acc >= tau
+
+# ============================================================
+# PUBLIC API (DROP-IN REPLACEMENT)
+# ============================================================
 
 def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
-    gen = jnp.asarray(gen, dtype=jnp.float16)
-    D   = jnp.asarray(D,   dtype=jnp.float16)
-    inv = jnp.asarray(inv_sigma, dtype=jnp.float16)
-
-    # Stage 1
-    keep_mask = fast_reject(gen, D, inv, tau)
-
-    idx = np.where(np.asarray(keep_mask))[0]
-    if len(idx) == 0:
-        return keep_mask, ~keep_mask, None
-
-    # Stage 2 — exact KDE
-    exact_mask = kde_filter_exact(
-        gen[idx],
-        D,
-        inv,
-        tau
+    mask = kde_filter_fast(
+        jnp.asarray(gen, dtype=jnp.float16),
+        jnp.asarray(D, dtype=jnp.float16),
+        jnp.asarray(inv_sigma, dtype=jnp.float16),
+        tau,
     )
-
-    final = np.zeros(len(gen), dtype=bool)
-    final[idx] = exact_mask
-    return final, ~final, None
-
-
+    return np.asarray(mask), None, None
 
 
 
@@ -857,6 +860,7 @@ def main():
             gen_path, model, num_workers, device, args
         )
     # Warmup JIT
+    '''
     _ = filter_gen_by_global_kde(
         gen_representations[:8],
         D,
@@ -864,7 +868,7 @@ def main():
         args.tau
     )
     jax.block_until_ready(_)
-
+    '''
 
     # ==============================
     # KDE FILTERING (timed)
