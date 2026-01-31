@@ -740,39 +740,56 @@ import jax.numpy as jnp
 import numpy as np
 from jax.scipy.special import logsumexp
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+BLOCK = 4096  # MUST be constant
+
 
 @jax.jit
-def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
+def kde_filter_fast(query, data, inv_sigma2, tau):
     Q = query.shape[0]
     N = data.shape[0]
 
-    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
-    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
+    # Precompute once
+    q_scaled = query * inv_sigma2
+    q_norm = jnp.sum(query * q_scaled, axis=1, keepdims=True)
 
-    n_blocks = (N + block_size - 1) // block_size
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+    m = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+
+    n_blocks = (N + BLOCK - 1) // BLOCK
 
     def body(i, state):
-        acc = state
+        acc, m = state
 
         d = jax.lax.dynamic_slice(
             data,
-            (i * block_size, 0),
-            (block_size, data.shape[1]),
+            (i * BLOCK, 0),
+            (BLOCK, data.shape[1]),
         )
 
         d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
-        cross = (query * inv_sigma2) @ d.T
+        cross = q_scaled @ d.T
 
-        contrib = logsumexp(
-            -0.5 * (q_norm + d_norm - 2 * cross),
-            axis=1,
+        contrib = -0.5 * (q_norm + d_norm - 2 * cross)
+
+        # Stable logsumexp update
+        m_new = jnp.maximum(m, jnp.max(contrib, axis=1))
+        acc = m_new + jnp.log(
+            jnp.exp(acc - m_new) +
+            jnp.sum(jnp.exp(contrib - m_new[:, None]), axis=1)
         )
 
-        acc = jnp.logaddexp(acc, contrib)
-        return acc
+        return acc, m_new
 
-    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
+    acc, _ = jax.lax.fori_loop(
+        0, n_blocks, body, (acc, m)
+    )
+
     return acc >= tau
+
 
 # ============================================================
 # PUBLIC API (DROP-IN REPLACEMENT)
@@ -786,6 +803,7 @@ def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
         tau,
     )
     return np.asarray(mask), None, None
+
 
 
 
