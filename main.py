@@ -869,7 +869,7 @@ def main():
     # ==============================
     # KDE FILTERING (timed)
     # ==============================
-
+    print(len(gen_representations), "LLLLLLLLLLLLLL")
     tau = float(args.tau)
 
     mask_keep, _, _ = filter_gen_by_global_kde(
