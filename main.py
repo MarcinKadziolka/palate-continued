@@ -735,42 +735,58 @@ def kde_early_exit(query, data, inv_sigma2, tau, block_size):
     )
 
     return acc
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax.scipy.special import logsumexp
+
+
+@jax.jit
+def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
+    Q = query.shape[0]
+    N = data.shape[0]
+
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
+
+    n_blocks = (N + block_size - 1) // block_size
+
+    def body(i, state):
+        acc = state
+
+        d = jax.lax.dynamic_slice(
+            data,
+            (i * block_size, 0),
+            (block_size, data.shape[1]),
+        )
+
+        d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
+        cross = (query * inv_sigma2) @ d.T
+
+        contrib = logsumexp(
+            -0.5 * (q_norm + d_norm - 2 * cross),
+            axis=1,
+        )
+
+        acc = jnp.logaddexp(acc, contrib)
+        return acc
+
+    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
+    return acc >= tau
 
 # ============================================================
 # PUBLIC API (DROP-IN REPLACEMENT)
 # ============================================================
 
-def filter_gen_by_global_kde(gen, D, inv_sigma, tau, block_size=4096):
-    """
-    Ultra-fast exact KDE filter.
-    Uses:
-      - FP16 tensor cores
-      - block streaming
-      - early exit logic (via thresholding)
-      - no host/device sync
-
-    Returns:
-        mask_keep, mask_reject, logp
-    """
-
-    # Move once to GPU
-    gen = jnp.asarray(gen, dtype=jnp.float16)
-    D   = jnp.asarray(D,   dtype=jnp.float16)
-    inv_sigma = jnp.asarray(inv_sigma, dtype=jnp.float16)
-
-    logp = kde_early_exit(
-        gen,
-        D,
-        inv_sigma,
+def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
+    mask = kde_filter_fast(
+        jnp.asarray(gen, dtype=jnp.float16),
+        jnp.asarray(D, dtype=jnp.float16),
+        jnp.asarray(inv_sigma, dtype=jnp.float16),
         tau,
-        block_size,
     )
+    return np.asarray(mask), None, None
 
-    logp = logp - jnp.log(D.shape[0])
-    logp = np.asarray(logp)
-
-    mask_keep = logp >= tau
-    return mask_keep, ~mask_keep, logp
 
 
 
