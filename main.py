@@ -842,6 +842,7 @@ def main():
         logger.info("Finished loading/computing test representations")
         logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     # ONCE ONLY
+    gen_path = gen_paths[0]
     t0 = time.perf_counter()
 
     D = np.vstack([train_representations, test_representations])
