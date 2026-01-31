@@ -214,3 +214,54 @@ def gaussian_mmd(x, y, sigma):
     kxy = jnp.exp(-inv_sigma2 * dxy).mean()
 
     return kxx + kyy - 2 * kxy, kxx + kyy
+@jax.jit
+def gaussian_mmd_fast(x, y, sigma, block=1024):
+    inv = 1.0 / (2.0 * sigma * sigma)
+
+    x2 = jnp.sum(x * x, axis=1)
+    y2 = jnp.sum(y * y, axis=1)
+
+    nx = x.shape[0]
+    ny = y.shape[0]
+
+    def kxx_body(i, acc):
+        xi = x[i:i+block]
+        xi2 = x2[i:i+block]
+
+        def inner(j, acc2):
+            xj = x[j:j+block]
+            xj2 = x2[j:j+block]
+            d = xi2[:, None] + xj2[None, :] - 2 * xi @ xj.T
+            return acc2 + jnp.sum(jnp.exp(-inv * d))
+
+        return jax.lax.fori_loop(0, nx, inner, acc)
+
+    def kyy_body(i, acc):
+        yi = y[i:i+block]
+        yi2 = y2[i:i+block]
+
+        def inner(j, acc2):
+            yj = y[j:j+block]
+            yj2 = y2[j:j+block]
+            d = yi2[:, None] + yj2[None, :] - 2 * yi @ yj.T
+            return acc2 + jnp.sum(jnp.exp(-inv * d))
+
+        return jax.lax.fori_loop(0, ny, inner, acc)
+
+    def kxy_body(i, acc):
+        xi = x[i:i+block]
+        xi2 = x2[i:i+block]
+
+        def inner(j, acc2):
+            yj = y[j:j+block]
+            yj2 = y2[j:j+block]
+            d = xi2[:, None] + yj2[None, :] - 2 * xi @ yj.T
+            return acc2 + jnp.sum(jnp.exp(-inv * d))
+
+        return jax.lax.fori_loop(0, ny, inner, acc)
+
+    kxx = jax.lax.fori_loop(0, nx, kxx_body, 0.0) / (nx * nx)
+    kyy = jax.lax.fori_loop(0, ny, kyy_body, 0.0) / (ny * ny)
+    kxy = jax.lax.fori_loop(0, nx, kxy_body, 0.0) / (nx * ny)
+
+    return kxx + kyy - 2 * kxy, kxx + kyy
