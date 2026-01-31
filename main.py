@@ -744,11 +744,16 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-BLOCK = 4096  # MUST be constant
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax.scipy.special import logsumexp
+
+BLOCK = 4096  # fixed
 
 
 @jax.jit
-def kde_filter_fast(query, data, inv_sigma2, tau):
+def kde_filter_exact(query, data, inv_sigma2, tau):
     Q = query.shape[0]
     N = data.shape[0]
 
@@ -757,13 +762,10 @@ def kde_filter_fast(query, data, inv_sigma2, tau):
     q_norm = jnp.sum(query * q_scaled, axis=1, keepdims=True)
 
     acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
-    m = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
 
     n_blocks = (N + BLOCK - 1) // BLOCK
 
-    def body(i, state):
-        acc, m = state
-
+    def body(i, acc):
         d = jax.lax.dynamic_slice(
             data,
             (i * BLOCK, 0),
@@ -773,36 +775,24 @@ def kde_filter_fast(query, data, inv_sigma2, tau):
         d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
         cross = q_scaled @ d.T
 
-        contrib = -0.5 * (q_norm + d_norm - 2 * cross)
+        contrib = -0.5 * (q_norm + d_norm - 2.0 * cross)
 
-        # Stable logsumexp update
-        m_new = jnp.maximum(m, jnp.max(contrib, axis=1))
-        acc = m_new + jnp.log(
-            jnp.exp(acc - m_new) +
-            jnp.sum(jnp.exp(contrib - m_new[:, None]), axis=1)
-        )
+        acc = jnp.logaddexp(acc, logsumexp(contrib, axis=1))
+        return acc
 
-        return acc, m_new
-
-    acc, _ = jax.lax.fori_loop(
-        0, n_blocks, body, (acc, m)
-    )
-
+    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
     return acc >= tau
 
 
-# ============================================================
-# PUBLIC API (DROP-IN REPLACEMENT)
-# ============================================================
-
 def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
-    mask = kde_filter_fast(
+    mask = kde_filter_exact(
         jnp.asarray(gen, dtype=jnp.float16),
         jnp.asarray(D, dtype=jnp.float16),
         jnp.asarray(inv_sigma, dtype=jnp.float16),
         tau,
     )
     return np.asarray(mask), None, None
+
 
 
 
