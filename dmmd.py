@@ -265,3 +265,55 @@ def gaussian_mmd_fast(x, y, sigma, block=1024):
     kxy = jax.lax.fori_loop(0, nx, kxy_body, 0.0) / (nx * ny)
 
     return kxx + kyy - 2 * kxy, kxx + kyy
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+# -----------------------------
+# BLOCKWISE GAUSSIAN MMD
+# -----------------------------
+
+@jax.jit
+def _block_mmd(x, x2, y, y2, inv_sigma2, block):
+    nx = x.shape[0]
+    ny = y.shape[0]
+
+    def outer(i, acc):
+        xi = x[i:i+block]
+        xi2 = x2[i:i+block]
+
+        def inner(j, acc2):
+            yj = y[j:j+block]
+            yj2 = y2[j:j+block]
+
+            d = xi2[:, None] + yj2[None, :] - 2.0 * xi @ yj.T
+            return acc2 + jnp.sum(jnp.exp(-inv_sigma2 * d))
+
+        return lax.fori_loop(0, ny, inner, acc)
+
+    return lax.fori_loop(0, nx, outer, 0.0)
+
+
+@jax.jit
+def gaussian_mmd_blockwise(x, y, sigma, block=1024):
+    """
+    Exact Gaussian MMD² using blockwise accumulation.
+    Fast, stable, GPU-friendly.
+    """
+
+    inv = 1.0 / (2.0 * sigma * sigma)
+
+    x = jnp.asarray(x, jnp.float32)
+    y = jnp.asarray(y, jnp.float32)
+
+    x2 = jnp.sum(x * x, axis=1)
+    y2 = jnp.sum(y * y, axis=1)
+
+    nx = x.shape[0]
+    ny = y.shape[0]
+
+    kxx = _block_mmd(x, x2, x, x2, inv, block) / (nx * nx)
+    kyy = _block_mmd(y, y2, y, y2, inv, block) / (ny * ny)
+    kxy = _block_mmd(x, x2, y, y2, inv, block) / (nx * ny)
+
+    return kxx + kyy - 2.0 * kxy, kxx + kyy

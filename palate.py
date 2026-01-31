@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_blockwise_jax, gaussian_mmd_fast
+from dmmd import dmmd_blockwise_jax, gaussian_mmd_blockwise
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -53,9 +53,9 @@ def compute_palate(
     gt = jnp.asarray(gen_gt, dtype=jnp.float32)
 
     # --- DMMDs ---
-    dmmd_test_gen, denom = gaussian_mmd_fast(test, gen, sigma)
-    dmmd_train_gt, _ = gaussian_mmd_fast(train, gt, sigma3)
-    dmmd_test_gt, _ = gaussian_mmd_fast(test, gt, sigma3)
+    dmmd_test_gen, denom = gaussian_mmd_blockwise(test, gen, sigma)
+    dmmd_train_gt, _ = gaussian_mmd_blockwise(train, gt, sigma3)
+    dmmd_test_gt, _ = gaussian_mmd_blockwise(test, gt, sigma3)
 
     palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
 
