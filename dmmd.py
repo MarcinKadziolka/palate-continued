@@ -185,3 +185,32 @@ def dmmd_fast(xp, x2, xm, nx,
     kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma, block_size) / (nx * ny)
 
     return kxx + kyy - 2 * kxy, kxx + kyy
+
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+
+
+@jax.jit
+def gaussian_mmd(x, y, sigma):
+    """
+    Exact Gaussian MMD:
+        MMD² = E[k(x,x)] + E[k(y,y)] - 2E[k(x,y)]
+    """
+
+    inv_sigma2 = 1.0 / (2.0 * sigma * sigma)
+
+    # norms
+    x2 = jnp.sum(x * x, axis=1, keepdims=True)
+    y2 = jnp.sum(y * y, axis=1, keepdims=True)
+
+    # pairwise squared distance
+    dxx = x2 + x2.T - 2 * (x @ x.T)
+    dyy = y2 + y2.T - 2 * (y @ y.T)
+    dxy = x2 + y2.T - 2 * (x @ y.T)
+
+    kxx = jnp.exp(-inv_sigma2 * dxx).mean()
+    kyy = jnp.exp(-inv_sigma2 * dyy).mean()
+    kxy = jnp.exp(-inv_sigma2 * dxy).mean()
+
+    return kxx + kyy - 2 * kxy, kxx + kyy

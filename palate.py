@@ -46,25 +46,21 @@ def compute_palate(
     """
     logger.info("Computing DMMD values...")
     t0 = time.time()
-    sigma3 = sigma/3
-    # prepare once
-    # Precompute once
-    train_p = prepare(train_representations, 1024)
-    test_p = prepare(test_representations, 1024)
-    gen_p = prepare(gen_representations, 1024)
-    gt_p = prepare(gen_gt, 1024)
+    sigma3 = sigma/3.0
+    train = jnp.asarray(train_representations, dtype=jnp.float32)
+    test = jnp.asarray(test_representations, dtype=jnp.float32)
+    gen = jnp.asarray(gen_representations, dtype=jnp.float32)
+    gt = jnp.asarray(gen_gt, dtype=jnp.float32)
 
-    dmmd_test_gen, denom_scale = dmmd_fast(*test_p, *gen_p, sigma, 1024)
+    # --- DMMDs ---
+    dmmd_test_gen, denom = gaussian_mmd(test, gen, sigma)
+    dmmd_train_gt, _ = gaussian_mmd(train, gt, sigma3)
+    dmmd_test_gt, _ = gaussian_mmd(test, gt, sigma3)
 
-    dmmd_train_gt, _ = dmmd_fast(*train_p, *gt_p, sigma3, 1024)
-    dmmd_test_gt, _ = dmmd_fast(*test_p, *gt_p, sigma3, 1024)
-
-
-    # Final metrics
     palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
 
     m_palate = (
-            dmmd_test_gen / (2.0 * denom_scale)
+            dmmd_test_gen / (2.0 * denom)
             + 0.5 * palate
     )
 
@@ -81,10 +77,8 @@ def compute_palate(
     return {
         "palate": palate,
         "m_palate": m_palate,
-        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
-        "dmmd_train_gen_3": dmmd_train_gen_3,
-        "dmmd_test_gen_3": dmmd_test_gen_3,
-        "denominator_scale": denominator_scale,
+        "dmmd_train_gt": dmmd_train_gt,
+        "dmmd_test_gt": dmmd_test_gt,
         "sigma": sigma,
     }
