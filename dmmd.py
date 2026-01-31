@@ -92,3 +92,57 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
+
+
+@jax.jit
+def dmmd_fused_minimal(
+    x,  x2,  xm,
+    y,  y2,  ym,
+    sigma,
+):
+    """
+    Returns:
+        dmmd  = kxx + kyy - 2*kxy
+        denom = kxx + kyy
+    """
+
+    BS = 1024
+
+    def kernel_sum(a, a2, am, b, b2, bm):
+        na = a.shape[0] // BS
+        nb = b.shape[0] // BS
+
+        def outer(i, acc):
+            ab = lax.dynamic_slice(a, (i * BS, 0), (BS, a.shape[1]))
+            a2b = lax.dynamic_slice(a2, (i * BS,), (BS,))
+            amb = lax.dynamic_slice(am, (i * BS,), (BS,))
+
+            def inner(j, acc2):
+                bb = lax.dynamic_slice(b, (j * BS, 0), (BS, b.shape[1]))
+                b2b = lax.dynamic_slice(b2, (j * BS,), (BS,))
+                bmb = lax.dynamic_slice(bm, (j * BS,), (BS,))
+
+                k = jnp.exp(
+                    -(a2b[:, None] + b2b[None, :] - 2.0 * ab @ bb.T)
+                    / (2.0 * sigma**2)
+                )
+
+                mask = amb[:, None] & bmb[None, :]
+                return acc2 + jnp.sum(jnp.where(mask, k, 0.0))
+
+            return lax.fori_loop(0, nb, inner, acc)
+
+        return lax.fori_loop(0, na, outer, 0.0)
+
+    # --- kernel sums ---
+    kxx = kernel_sum(x, x2, xm, x, x2, xm)
+    kyy = kernel_sum(y, y2, ym, y, y2, ym)
+    kxy = kernel_sum(x, x2, xm, y, y2, ym)
+
+    nx = xm.sum()
+    ny = ym.sum()
+
+    dmmd = kxx / (nx * nx) + kyy / (ny * ny) - 2.0 * kxy / (nx * ny)
+    denom = kxx / (nx * nx) + kyy / (ny * ny)
+
+    return dmmd, denom
