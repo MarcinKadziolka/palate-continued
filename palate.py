@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_blockwise_optimized
+from dmmd import dmmd_blockwise_jax
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -47,19 +47,19 @@ def compute_palate(
     t0 = time.time()
 
     # Precompute once
-    dmmd_test_gen, denominator_scale = dmmd_blockwise_optimized(
+    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
         test_representations,
         gen_representations,
         sigma
     )
 
-    dmmd_train_gen_3, _ = dmmd_blockwise_optimized(
+    dmmd_train_gen_3, _ = dmmd_blockwise_jax(
         train_representations,
         gen_gt,
         sigma / 3
     )
 
-    dmmd_test_gen_3, _ = dmmd_blockwise_optimized(
+    dmmd_test_gen_3, _ = dmmd_blockwise_jax(
         test_representations,
         gen_gt,
         sigma / 3
