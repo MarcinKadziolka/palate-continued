@@ -757,13 +757,15 @@ def fast_reject(query, data, inv_sigma2, tau):
     q_scaled = query * inv_sigma2
     q_norm = jnp.sum(query * q_scaled, axis=1, keepdims=True)
 
-    # compute only max kernel value
     cross = q_scaled @ data.T
     d_norm = jnp.sum(data * data * inv_sigma2, axis=1)
 
-    max_val = jnp.max(-0.5 * (q_norm + d_norm - 2 * cross), axis=1)
+    max_kernel = jnp.max(
+        -0.5 * (q_norm + d_norm - 2 * cross),
+        axis=1
+    )
 
-    return max_val + jnp.log(data.shape[0]) >= tau
+    return max_kernel + jnp.log(data.shape[0]) >= tau
 
 
 def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
@@ -771,25 +773,25 @@ def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
     D   = jnp.asarray(D,   dtype=jnp.float16)
     inv = jnp.asarray(inv_sigma, dtype=jnp.float16)
 
-    # FAST REJECT
+    # Stage 1
     keep_mask = fast_reject(gen, D, inv, tau)
-    keep_idx = np.where(np.asarray(keep_mask))[0]
 
-    if len(keep_idx) == 0:
+    idx = np.where(np.asarray(keep_mask))[0]
+    if len(idx) == 0:
         return keep_mask, ~keep_mask, None
 
-    # EXACT KDE ONLY FOR SURVIVORS
-    logp = kde_filter_exact(
-        gen[keep_idx],
+    # Stage 2 — exact KDE
+    exact_mask = kde_filter_exact(
+        gen[idx],
         D,
         inv,
         tau
     )
 
-    final_mask = np.zeros(len(gen), dtype=bool)
-    final_mask[keep_idx] = logp
+    final = np.zeros(len(gen), dtype=bool)
+    final[idx] = exact_mask
+    return final, ~final, None
 
-    return final_mask, ~final_mask, None
 
 
 
