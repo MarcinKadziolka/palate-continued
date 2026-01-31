@@ -887,6 +887,8 @@ def main():
     print(len(gen_gt), "MMMMMMMMMMMMM")
     jax.block_until_ready(mask_keep)
     kde_time = time.perf_counter() - t0
+    print(kde_time, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
+
 
     # ==============================
     # PALATE (timed)
@@ -906,7 +908,6 @@ def main():
     palate_components["time_kde_sec"] = kde_time
     palate_components["time_palate_sec"] = palate_time
     palate_components["time_total_sec"] = total_time
-    print(kde_time, "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT")
 
     save_score(
         palate_components,
