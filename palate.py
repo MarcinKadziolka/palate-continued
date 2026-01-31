@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_blockwise_jax, gaussian_mmd_blockwise
+from dmmd import dmmd_blockwise_jax
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -20,7 +20,6 @@ def prepare(x, block_size):
     x_pad, xmask, nx = pad_to_block(x, block_size)
     x2 = jnp.sum(x_pad * x_pad, axis=1)
     return x_pad, x2, xmask, nx
-
 
 
 def compute_palate(
@@ -46,27 +45,49 @@ def compute_palate(
     """
     logger.info("Computing DMMD values...")
     t0 = time.time()
-    sigma3 = sigma/3.0
-    train = jnp.asarray(train_representations, dtype=jnp.float32)
-    test = jnp.asarray(test_representations, dtype=jnp.float32)
-    gen = jnp.asarray(gen_representations, dtype=jnp.float32)
-    gt = jnp.asarray(gen_gt, dtype=jnp.float32)
+    sigma3 = sigma / 3
 
-    # --- DMMDs ---
-    dmmd_test_gen, denom = gaussian_mmd_blockwise(test, gen, sigma)
-    dmmd_train_gt, _ = gaussian_mmd_blockwise(train, gt, sigma3)
-    dmmd_test_gt, _ = gaussian_mmd_blockwise(test, gt, sigma3)
+    # Precompute once
+    train_p = prepare(train_representations, 1024)
+    test_p = prepare(test_representations, 1024)
+    gen_p = prepare(gen_representations, 1024)
+    gt_p = prepare(gen_gt, 1024)
 
-    palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
+    dmmd_train_gen, _ = dmmd_blockwise_jax(*train_p, *gen_p, sigma)
+    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(*test_p, *gen_p, sigma)
 
-    m_palate = (
-            dmmd_test_gen / (2.0 * denom)
-            + 0.5 * palate
+    dmmd_train_gen_3, _ = dmmd_blockwise_jax(*train_p, *gt_p, sigma3)
+    dmmd_test_gen_3, _ = dmmd_blockwise_jax(*test_p, *gt_p, sigma3)
+    '''
+    dmmd_train_gen, _ = dmmd_blockwise_jax(
+        x=train_representations,
+        y=gen_representations,
+        sigma=sigma,
     )
 
+    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
+        x=test_representations,
+        y=gen_representations,
+        sigma=sigma,
+    )
+
+    dmmd_train_gen_3, _ = dmmd_blockwise_jax(
+        x=train_representations,
+        y=gen_gt,
+        sigma=sigma3,
+    )
+
+    dmmd_test_gen_3, _ = dmmd_blockwise_jax(
+        x=test_representations,
+        y=gen_gt,
+        sigma=sigma3,
+    )
+    '''
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
     # ---- Palate formulas ----
+    palate = dmmd_test_gen_3 / (dmmd_test_gen_3 + dmmd_train_gen_3)
+    m_palate = dmmd_test_gen / (2 * denominator_scale) + 0.5 * palate
 
     logger.info(
         "Palate computed (m_palate=%.6f, palate=%.6f)",
@@ -77,8 +98,10 @@ def compute_palate(
     return {
         "palate": palate,
         "m_palate": m_palate,
+        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
-        "dmmd_train_gt": dmmd_train_gt,
-        "dmmd_test_gt": dmmd_test_gt,
+        "dmmd_train_gen_3": dmmd_train_gen_3,
+        "dmmd_test_gen_3": dmmd_test_gen_3,
+        "denominator_scale": denominator_scale,
         "sigma": sigma,
     }
