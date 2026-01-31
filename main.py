@@ -577,10 +577,38 @@ def log_kde_fast_exact(query, data, sigma, batch_size=1024):
         outs.append(out)
 
     return jnp.concatenate(outs) - logN
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+
+
+@jax.jit
+def log_kde_gpu_maxspeed(query, data, sigma):
+    """
+    Fastest exact KDE possible on GPU.
+    Requires enough VRAM for (Q × N) matrix.
+    """
+
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data  = jnp.asarray(data,  dtype=jnp.float32)
+
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    # Precompute norms
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data  * data  * inv_sigma2, axis=1)
+
+    # 🔥 Single massive GEMM
+    cross = (query * inv_sigma2) @ data.T
+
+    # Full KDE
+    logp = logsumexp(-0.5 * (q_norm + d_norm - 2.0 * cross), axis=1)
+
+    return logp - jnp.log(data.shape[0])
 
 
 def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
-    logp = log_kde_fast_exact(gen, D, inv_sigma)
+    logp = log_kde_gpu_maxspeed(gen, D, inv_sigma)
 
     logp = np.asarray(logp)
     mask_keep = logp >= tau
