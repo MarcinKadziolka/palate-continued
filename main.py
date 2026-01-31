@@ -880,6 +880,7 @@ def main():
     )
 
     gen_gt = gen_representations[mask_keep]
+    print(len(gen_gt), "MMMMMMMMMMMMM")
     jax.block_until_ready(mask_keep)
     kde_time = time.perf_counter() - t0
 
