@@ -753,46 +753,43 @@ BLOCK = 4096  # fixed
 
 
 @jax.jit
-def kde_filter_exact(query, data, inv_sigma2, tau):
-    Q = query.shape[0]
-    N = data.shape[0]
-
-    # Precompute once
+def fast_reject(query, data, inv_sigma2, tau):
     q_scaled = query * inv_sigma2
     q_norm = jnp.sum(query * q_scaled, axis=1, keepdims=True)
 
-    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+    # compute only max kernel value
+    cross = q_scaled @ data.T
+    d_norm = jnp.sum(data * data * inv_sigma2, axis=1)
 
-    n_blocks = (N + BLOCK - 1) // BLOCK
+    max_val = jnp.max(-0.5 * (q_norm + d_norm - 2 * cross), axis=1)
 
-    def body(i, acc):
-        d = jax.lax.dynamic_slice(
-            data,
-            (i * BLOCK, 0),
-            (BLOCK, data.shape[1]),
-        )
-
-        d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
-        cross = q_scaled @ d.T
-
-        contrib = -0.5 * (q_norm + d_norm - 2.0 * cross)
-
-        acc = jnp.logaddexp(acc, logsumexp(contrib, axis=1))
-        return acc
-
-    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
-    return acc >= tau
+    return max_val + jnp.log(data.shape[0]) >= tau
 
 
 def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
-    mask = kde_filter_exact(
-        jnp.asarray(gen, dtype=jnp.float16),
-        jnp.asarray(D, dtype=jnp.float16),
-        jnp.asarray(inv_sigma, dtype=jnp.float16),
-        tau,
-    )
-    return np.asarray(mask), None, None
+    gen = jnp.asarray(gen, dtype=jnp.float16)
+    D   = jnp.asarray(D,   dtype=jnp.float16)
+    inv = jnp.asarray(inv_sigma, dtype=jnp.float16)
 
+    # FAST REJECT
+    keep_mask = fast_reject(gen, D, inv, tau)
+    keep_idx = np.where(np.asarray(keep_mask))[0]
+
+    if len(keep_idx) == 0:
+        return keep_mask, ~keep_mask, None
+
+    # EXACT KDE ONLY FOR SURVIVORS
+    logp = kde_filter_exact(
+        gen[keep_idx],
+        D,
+        inv,
+        tau
+    )
+
+    final_mask = np.zeros(len(gen), dtype=bool)
+    final_mask[keep_idx] = logp
+
+    return final_mask, ~final_mask, None
 
 
 
