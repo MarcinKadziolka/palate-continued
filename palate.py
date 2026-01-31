@@ -22,6 +22,7 @@ def prepare(x, block_size):
     return x_pad, x2, xmask, nx
 
 
+
 def compute_palate(
     *,
     train_representations: np.ndarray,
@@ -45,30 +46,19 @@ def compute_palate(
     """
     logger.info("Computing DMMD values...")
     t0 = time.time()
+    sigma3 = sigma/3
     # prepare once
-    train_p = prepare(train_representations)
-    test_p = prepare(test_representations)
-    gen_p = prepare(gen_representations)
-    gt_p = prepare(gen_gt)
+    # Precompute once
+    train_p = prepare(train_representations, 1024)
+    test_p = prepare(test_representations, 1024)
+    gen_p = prepare(gen_representations, 1024)
+    gt_p = prepare(gen_gt, 1024)
 
-    # MMDs
-    dmmd_test_gen, denom_scale = dmmd_fused_minimal(
-        *test_p,
-        *gen_p,
-        sigma
-    )
+    dmmd_test_gen, denom_scale = dmmd_fast(*test_p, *gen_p, sigma, 1024)
 
-    dmmd_train_gt, _ = dmmd_fused_minimal(
-        *train_p,
-        *gt_p,
-        sigma / 3
-    )
+    dmmd_train_gt, _ = dmmd_fast(*train_p, *gt_p, sigma3, 1024)
+    dmmd_test_gt, _ = dmmd_fast(*test_p, *gt_p, sigma3, 1024)
 
-    dmmd_test_gt, _ = dmmd_fused_minimal(
-        *test_p,
-        *gt_p,
-        sigma / 3
-    )
 
     # Final metrics
     palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
@@ -78,31 +68,6 @@ def compute_palate(
             + 0.5 * palate
     )
 
-    '''
-    dmmd_train_gen, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_representations,
-        sigma=sigma,
-    )
-
-    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_representations,
-        sigma=sigma,
-    )
-
-    dmmd_train_gen_3, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_gt,
-        sigma=sigma3,
-    )
-
-    dmmd_test_gen_3, _ = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_gt,
-        sigma=sigma3,
-    )
-    '''
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
     # ---- Palate formulas ----

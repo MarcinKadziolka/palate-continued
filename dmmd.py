@@ -146,3 +146,42 @@ def dmmd_fused_minimal(
     denom = kxx / (nx * nx) + kyy / (ny * ny)
 
     return dmmd, denom
+
+@jax.jit
+def kernel_mean_precomputed(x, x2, xm, y, y2, ym, sigma, block_size):
+    nbx = x.shape[0] // block_size
+    nby = y.shape[0] // block_size
+
+    def outer(i, acc):
+        xb = lax.dynamic_slice(x, (i*block_size, 0), (block_size, x.shape[1]))
+        x2b = lax.dynamic_slice(x2, (i*block_size,), (block_size,))
+        xm_b = lax.dynamic_slice(xm, (i*block_size,), (block_size,))
+
+        def inner(j, acc2):
+            yb = lax.dynamic_slice(y, (j*block_size, 0), (block_size, y.shape[1]))
+            y2b = lax.dynamic_slice(y2, (j*block_size,), (block_size,))
+            ym_b = lax.dynamic_slice(ym, (j*block_size,), (block_size,))
+
+            k = jnp.exp(
+                -(x2b[:, None] + y2b[None, :] - 2 * xb @ yb.T)
+                / (2 * sigma**2)
+            )
+
+            mask = xm_b[:, None] & ym_b[None, :]
+            return acc2 + jnp.sum(jnp.where(mask, k, 0.0))
+
+        return lax.fori_loop(0, nby, inner, acc)
+
+    total = lax.fori_loop(0, nbx, outer, 0.0)
+    return total
+
+@jax.jit
+def dmmd_fast(xp, x2, xm, nx,
+              yp, y2, ym, ny,
+              sigma, block_size):
+
+    kxx = kernel_mean_precomputed(xp, x2, xm, xp, x2, xm, sigma, block_size) / (nx * nx)
+    kyy = kernel_mean_precomputed(yp, y2, ym, yp, y2, ym, sigma, block_size) / (ny * ny)
+    kxy = kernel_mean_precomputed(xp, x2, xm, yp, y2, ym, sigma, block_size) / (nx * ny)
+
+    return kxx + kyy - 2 * kxy, kxx + kyy
