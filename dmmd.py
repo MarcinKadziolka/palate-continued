@@ -192,3 +192,70 @@ def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
+
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+
+@jax.jit
+def dmmd_blockwise_optimized(
+    x, y, sigma,
+    block_size=1024,
+):
+    n = x.shape[0]
+    m = y.shape[0]
+
+    x2 = jnp.sum(x * x, axis=1)
+    y2 = jnp.sum(y * y, axis=1)
+
+    nbx = n // block_size
+    nby = m // block_size
+
+    def kernel_sum(a, a2, b, b2):
+        def outer(i, acc):
+            ai = a[i*block_size:(i+1)*block_size]
+            ai2 = a2[i*block_size:(i+1)*block_size]
+
+            def inner(j, acc2):
+                bj = b[j*block_size:(j+1)*block_size]
+                bj2 = b2[j*block_size:(j+1)*block_size]
+
+                k = jnp.exp(
+                    -(ai2[:, None] + bj2[None, :] - 2 * ai @ bj.T)
+                    / (2 * sigma**2)
+                )
+                return acc2 + jnp.sum(k)
+
+            return lax.fori_loop(0, nby, inner, acc)
+
+        return lax.fori_loop(0, nbx, outer, 0.0)
+
+    # main blocks
+    kxx = kernel_sum(x, x2, x, x2)
+    kyy = kernel_sum(y, y2, y, y2)
+    kxy = kernel_sum(x, x2, y, y2)
+
+    # handle remainder (small, cheap)
+    xr = x[nbx * block_size:]
+    yr = y[nby * block_size:]
+    if xr.shape[0] > 0:
+        kxx += jnp.sum(jnp.exp(
+            -(x2[nbx*block_size:, None]
+              + x2[None, :] - 2 * xr @ x.T) / (2*sigma**2)
+        ))
+    if yr.shape[0] > 0:
+        kyy += jnp.sum(jnp.exp(
+            -(y2[nby*block_size:, None]
+              + y2[None, :] - 2 * yr @ y.T) / (2*sigma**2)
+        ))
+    if xr.shape[0] > 0:
+        kxy += jnp.sum(jnp.exp(
+            -(x2[nbx*block_size:, None]
+              + y2[None, :] - 2 * xr @ y.T) / (2*sigma**2)
+        ))
+
+    return (
+        kxx / (n * n) + kyy / (m * m) - 2 * kxy / (n * m),
+        kxx / (n * n) + kyy / (m * m),
+    )
