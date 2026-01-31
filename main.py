@@ -695,6 +695,46 @@ def _kde_scan(query, data, inv_sigma2, tau, block_size):
 
     return acc
 
+@jax.jit
+def kde_early_exit(query, data, inv_sigma2, tau, block_size):
+    Q = query.shape[0]
+    N = data.shape[0]
+
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+
+    n_blocks = (N + block_size - 1) // block_size
+
+    def body(i, state):
+        acc, done = state
+
+        d = jax.lax.dynamic_slice(
+            data,
+            (i * block_size, 0),
+            (block_size, data.shape[1]),
+        )
+
+        d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
+        cross = (query * inv_sigma2) @ d.T
+
+        contrib = jax.scipy.special.logsumexp(
+            -0.5 * (q_norm + d_norm - 2 * cross),
+            axis=1
+        )
+
+        acc = jnp.logaddexp(acc, contrib)
+        done = jnp.logical_or(done, acc >= tau)
+
+        return acc, done
+
+    acc0 = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
+    done0 = jnp.zeros((Q,), dtype=bool)
+
+    acc, _ = jax.lax.fori_loop(
+        0, n_blocks, body, (acc0, done0)
+    )
+
+    return acc
 
 # ============================================================
 # PUBLIC API (DROP-IN REPLACEMENT)
@@ -718,7 +758,7 @@ def filter_gen_by_global_kde(gen, D, inv_sigma, tau, block_size=4096):
     D   = jnp.asarray(D,   dtype=jnp.float16)
     inv_sigma = jnp.asarray(inv_sigma, dtype=jnp.float16)
 
-    logp = _kde_scan(
+    logp = kde_early_exit(
         gen,
         D,
         inv_sigma,
