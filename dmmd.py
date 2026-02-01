@@ -73,15 +73,16 @@ def compute_all_dmmd(
 
 @jax.jit
 def kernel_sum(x, y, sigma):
-    # x: [N, D], y: [M, D]
     x2 = jnp.sum(x * x, axis=1, keepdims=True)
     y2 = jnp.sum(y * y, axis=1, keepdims=True)
 
     dist2 = x2 - 2 * x @ y.T + y2.T
     k = jnp.exp(-dist2 / (2 * sigma**2))
 
-    return jnp.sum(k), k.shape[0] * k.shape[1]
-
+    return (
+        jnp.sum(k),
+        jnp.asarray(k.shape[0] * k.shape[1], dtype=jnp.float32)
+    )
 
 def dmmd_from_blocks(Kxx, Kyy, Kxy):
     return (
