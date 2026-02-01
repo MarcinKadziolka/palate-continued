@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_blockwise_jax
+from dmmd import dmmd_blockwise_jax, compute_all_dmmd
 import jax
 import jax.numpy as jnp
 from jax import lax
