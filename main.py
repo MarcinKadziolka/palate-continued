@@ -543,14 +543,18 @@ def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
     Q = query.shape[0]
     N = data.shape[0]
 
+    # compute in fp16, accumulate in fp32
+    query = query.astype(jnp.float16)
+    data  = data.astype(jnp.float16)
+    inv_sigma2 = inv_sigma2.astype(jnp.float32)
+
     q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
-    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
+
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
 
     n_blocks = (N + block_size - 1) // block_size
 
-    def body(i, state):
-        acc = state
-
+    def body(i, acc):
         d = jax.lax.dynamic_slice(
             data,
             (i * block_size, 0),
@@ -558,18 +562,20 @@ def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
         )
 
         d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
+
         cross = (query * inv_sigma2) @ d.T
 
-        contrib = logsumexp(
-            -0.5 * (q_norm + d_norm - 2 * cross),
-            axis=1,
-        )
+        # 🔥 STABLE log-sum-exp
+        logits = -0.5 * (q_norm + d_norm - 2.0 * cross)
+        contrib = jax.scipy.special.logsumexp(logits, axis=1)
 
-        acc = jnp.logaddexp(acc, contrib)
-        return acc
+        return jnp.logaddexp(acc, contrib)
 
     acc = jax.lax.fori_loop(0, n_blocks, body, acc)
+
     return acc >= tau
+
+
 
 # ============================================================
 # PUBLIC API (DROP-IN REPLACEMENT)
