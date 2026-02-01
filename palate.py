@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_blockwise_jax, compute_all_dmmd
+from dmmd import dmmd_from_blocks, compute_all_kernels
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -22,52 +22,24 @@ def prepare(x, block_size):
     return x_pad, x2, xmask, nx
 
 
-def compute_palate(
-    *,
-    train_representations: np.ndarray,
-    test_representations: np.ndarray,
-    gen_representations: np.ndarray,
-    gen_gt: np.ndarray,
-    sigma: float,
-):
-    """
-    Compute palate and m_palate metrics.
+def compute_palate(T, E, G, GT, sigma):
+    K = compute_all_kernels(T, E, G, GT, sigma)
 
-    Returns:
-        dict with:
-            - palate
-            - m_palate
-            - dmmd_train_gen
-            - dmmd_test_gen
-            - dmmd_test_train
-            - denominator_scale
-            - sigma
-    """
-    logger.info("Computing DMMD values...")
+    dmmd_train_gen = dmmd_from_blocks(K["TT"], K["GG"], K["TG"])
+    dmmd_test_gen  = dmmd_from_blocks(K["EE"], K["GG"], K["EG"])
 
-    train = jnp.asarray(train_representations, dtype=jnp.float32)
-    test = jnp.asarray(test_representations, dtype=jnp.float32)
-    gen = jnp.asarray(gen_representations, dtype=jnp.float32)
-    gt = jnp.asarray(gen_gt, dtype=jnp.float32)
+    dmmd_train_gt  = dmmd_from_blocks(K["TT"], K["GTGT"], K["TGT"])
+    dmmd_test_gt   = dmmd_from_blocks(K["EE"], K["GTGT"], K["EGT"])
 
-    (
-        palate,
-        m_palate,
-        dmmd_test_gen,
-        dmmd_train_gen_3,
-        dmmd_test_gen_3,
-        denominator_scale,
-    ) = compute_all_dmmd(
-        train, test, gen, gt, sigma
-    )
+    palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
+    m_palate = dmmd_test_gen / 2 + 0.5 * palate
 
     return {
-        "palate": float(palate),
-        "m_palate": float(m_palate),
-        "dmmd_test_gen": float(dmmd_test_gen),
-        "dmmd_train_gen_3": float(dmmd_train_gen_3),
-        "dmmd_test_gen_3": float(dmmd_test_gen_3),
-        "denominator_scale": float(denominator_scale),
-        "sigma": sigma,
-        "fraction": len(gen_gt) / len(gen_representations),
+        "palate": palate,
+        "m_palate": m_palate,
+        "dmmd_train_gen": dmmd_train_gen,
+        "dmmd_test_gen": dmmd_test_gen,
+        "dmmd_train_gen_3": dmmd_train_gt,
+        "dmmd_test_gen_3": dmmd_test_gt,
     }
+

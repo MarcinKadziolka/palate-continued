@@ -70,3 +70,32 @@ def compute_all_dmmd(
         d_test_gt,
         denom,
     )
+
+@jax.jit
+def kernel_sum(x, y, sigma):
+    # x: [N, D], y: [M, D]
+    x2 = jnp.sum(x * x, axis=1, keepdims=True)
+    y2 = jnp.sum(y * y, axis=1, keepdims=True)
+
+    dist2 = x2 - 2 * x @ y.T + y2.T
+    k = jnp.exp(-dist2 / (2 * sigma**2))
+
+    return jnp.sum(k), k.shape[0] * k.shape[1]
+
+
+def dmmd_from_blocks(a, b, ab):
+    return a[0]/a[1] + b[0]/b[1] - 2 * ab[0]/ab[1]
+
+def compute_all_kernels(T, E, G, GT, sigma):
+    return {
+        "TT": kernel_sum(T, T, sigma),
+        "EE": kernel_sum(E, E, sigma),
+        "GG": kernel_sum(G, G, sigma),
+        "GTGT": kernel_sum(GT, GT, sigma),
+
+        "TG": kernel_sum(T, G, sigma),
+        "EG": kernel_sum(E, G, sigma),
+        "TGT": kernel_sum(T, GT, sigma),
+        "EGT": kernel_sum(E, GT, sigma),
+    }
+

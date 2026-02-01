@@ -472,6 +472,8 @@ import jax
 import jax.numpy as jnp
 from jax import lax
 from jax.scipy.special import logsumexp
+import jax
+import jax.numpy as jnp
 
 
 @jax.jit
@@ -630,11 +632,15 @@ def main():
         # ==============================
         t1 = time.perf_counter()
 
+        train_jax = jax.device_put(jnp.asarray(train_representations, dtype=jnp.float32))
+        test_jax = jax.device_put(jnp.asarray(test_representations, dtype=jnp.float32))
+        gen_jax = jax.device_put(jnp.asarray(gen_representations, dtype=jnp.float32))
+        gt_jax = jax.device_put(jnp.asarray(gen_gt, dtype=jnp.float32))
         palate_components = compute_palate(
-            train_representations=train_representations,
-            test_representations=test_representations,
-            gen_representations=gen_representations,
-            gen_gt=gen_gt,
+            T=train_jax,
+            E=test_jax,
+            G=gen_jax,
+            GT=gt_jax,
             sigma=args.sigma,
         )
 
