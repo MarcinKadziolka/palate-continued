@@ -538,18 +538,46 @@ def log_kde_fast(query, data, sigma):
 def use_fast_kde(n_query, n_data):
     return (n_query * n_data) <= 400_000_000
 
+import jax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+import numpy as np
+
+
+# ============================
+# NUMERICALLY SAFE KDE FILTER
+# ============================
+
 @jax.jit
-def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
+def kde_filter_fast(
+    query,
+    data,
+    inv_sigma2,
+    tau,
+    block_size=4096,
+):
+    """
+    Exact KDE thresholding with anisotropic sigma.
+    Safe, fast, no NaNs.
+
+    query: [Q, D]
+    data:  [N, D]
+    inv_sigma2: [D]
+    tau: float
+    """
+
     Q = query.shape[0]
     N = data.shape[0]
 
-    # compute in fp16, accumulate in fp32
+    # --- cast once ---
     query = query.astype(jnp.float16)
     data  = data.astype(jnp.float16)
     inv_sigma2 = inv_sigma2.astype(jnp.float32)
 
+    # --- precompute norms ---
     q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
 
+    # accumulator must be FP32
     acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
 
     n_blocks = (N + block_size - 1) // block_size
@@ -565,9 +593,10 @@ def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
 
         cross = (query * inv_sigma2) @ d.T
 
-        # 🔥 STABLE log-sum-exp
         logits = -0.5 * (q_norm + d_norm - 2.0 * cross)
-        contrib = jax.scipy.special.logsumexp(logits, axis=1)
+
+        # stable logsumexp
+        contrib = logsumexp(logits, axis=1)
 
         return jnp.logaddexp(acc, contrib)
 
@@ -575,19 +604,22 @@ def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
 
     return acc >= tau
 
+def filter_gen_by_global_kde(gen, D, sigma_d, tau):
+    """
+    gen: [Q, D]
+    D:   [N, D]
+    sigma_d: [D]
+    """
 
+    inv_sigma2 = 1.0 / (sigma_d ** 2)
 
-# ============================================================
-# PUBLIC API (DROP-IN REPLACEMENT)
-# ============================================================
-
-def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
     mask = kde_filter_fast(
-        jnp.asarray(gen, dtype=jnp.float16),
-        jnp.asarray(D, dtype=jnp.float16),
-        jnp.asarray(inv_sigma, dtype=jnp.float16),
+        jnp.asarray(gen, dtype=jnp.float32),
+        jnp.asarray(D, dtype=jnp.float32),
+        jnp.asarray(inv_sigma2, dtype=jnp.float32),
         tau,
     )
+
     return np.asarray(mask), None, None
 
 
@@ -654,12 +686,11 @@ def main():
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
-        inv_sigma = 1.0 / (sigma_D ** 2)
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
             gen_representations,
             D,
-            inv_sigma,
+            sigma_D,
             tau,
         )
 
