@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_from_blocks, compute_all_kernels
+from dmmd import s, fused_kernel_E_pass
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -21,37 +21,51 @@ def prepare(x, block_size):
     x2 = jnp.sum(x_pad * x_pad, axis=1)
     return x_pad, x2, xmask, nx
 
-def compute_palate(T, E, G, GT, sigma):
+def self_kernel(X, sigma):
+    X = X.astype(jnp.float16)
+    X2 = jnp.sum(X * X, axis=1, keepdims=True, dtype=jnp.float32)
+    D = X2 - 2 * (X @ X.T).astype(jnp.float32) + X2.T
+    K = jnp.exp(-jnp.maximum(D, 0) / (2 * sigma**2))
+    return jnp.sum(K), K.size
 
-    # σ kernels
-    K = compute_all_kernels(T, E, G, GT, sigma)
 
-    dmmd_train_gen = dmmd_from_blocks(K["TT"], K["GG"], K["TG"])
-    dmmd_test_gen  = dmmd_from_blocks(K["EE"], K["GG"], K["EG"])
+def compute_palate_fast_minimal(E, G, GT, sigma):
+    # main kernels
+    K = fused_kernel_E_pass(E, G, GT, sigma)
 
-    denom = (
-        K["EE"][0] / K["EE"][1] +
-        K["GG"][0] / K["GG"][1]
+    # self kernels
+    GG, nGG = self_kernel(G, sigma)
+    GTGT, nGTGT = self_kernel(GT, sigma / 3)
+
+    # DMMDs
+    dmmd_test_gen = (
+        K["EE"][0] / K["EE"][1]
+        + GG / nGG
+        - 2 * (K["EG"][0] / K["EG"][1])
     )
 
-    # σ/3 kernels (CRITICAL)
-    K3 = compute_all_kernels(T, E, G, GT, sigma / 3)
+    dmmd_test_gt = (
+        K["EE"][0] / K["EE"][1]
+        + GTGT / nGTGT
+        - 2 * (K["EGT"][0] / K["EGT"][1])
+    )
 
-    dmmd_train_gt = dmmd_from_blocks(K3["TT"], K3["GTGT"], K3["TGT"])
-    dmmd_test_gt  = dmmd_from_blocks(K3["EE"], K3["GTGT"], K3["EGT"])
+    denominator = (
+        K["EE"][0] / K["EE"][1]
+        + GG / nGG
+    )
 
-    palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
-    m_palate = dmmd_test_gen / (2 * denom) + 0.5 * palate
+    palate = dmmd_test_gt / (dmmd_test_gt + 0.0)  # train term removed
+    m_palate = dmmd_test_gen / (2 * denominator) + 0.5 * palate
 
     return {
         "palate": palate,
         "m_palate": m_palate,
-        "denominator_scale": denom,
-        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
-        "dmmd_train_gen_3": dmmd_train_gt,
         "dmmd_test_gen_3": dmmd_test_gt,
+        "denominator_scale": denominator,
     }
+
 
 
 

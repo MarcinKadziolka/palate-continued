@@ -160,3 +160,82 @@ def compute_all_kernels(T, E, G, GT, sigma):
     }
 
 
+import jax
+import jax.numpy as jnp
+
+
+def fused_kernel_E_pass(E, G, GT, sigma):
+    E = E.astype(jnp.float16)
+    G = G.astype(jnp.float16)
+    GT = GT.astype(jnp.float16)
+
+    E2 = jnp.sum(E * E, axis=1, keepdims=True, dtype=jnp.float32)
+    G2 = jnp.sum(G * G, axis=1, keepdims=True, dtype=jnp.float32)
+    GT2 = jnp.sum(GT * GT, axis=1, keepdims=True, dtype=jnp.float32)
+
+    # sigma kernels
+    EG = E2 - 2 * (E @ G.T).astype(jnp.float32) + G2.T
+    EE = E2 - 2 * (E @ E.T).astype(jnp.float32) + E2.T
+
+    # sigma/3 kernels
+    EGT = E2 - 2 * (E @ GT.T).astype(jnp.float32) + GT2.T
+
+    EG  = jnp.exp(-jnp.maximum(EG, 0)  / (2 * sigma**2))
+    EE  = jnp.exp(-jnp.maximum(EE, 0)  / (2 * sigma**2))
+    EGT = jnp.exp(-jnp.maximum(EGT, 0) / (2 * (sigma/3)**2))
+
+    return {
+        "EG":  (jnp.sum(EG),  EG.size),
+        "EE":  (jnp.sum(EE),  EE.size),
+        "EGT": (jnp.sum(EGT), EGT.size),
+    }
+import jax
+import jax.numpy as jnp
+
+
+def fused_kernel_E_pass(E, G, GT, sigma):
+    E = E.astype(jnp.float16)
+    G = G.astype(jnp.float16)
+    GT = GT.astype(jnp.float16)
+
+    E2 = jnp.sum(E * E, axis=1, keepdims=True, dtype=jnp.float32)
+    G2 = jnp.sum(G * G, axis=1, keepdims=True, dtype=jnp.float32)
+    GT2 = jnp.sum(GT * GT, axis=1, keepdims=True, dtype=jnp.float32)
+
+    # sigma kernels
+    EG = E2 - 2 * (E @ G.T).astype(jnp.float32) + G2.T
+    EE = E2 - 2 * (E @ E.T).astype(jnp.float32) + E2.T
+
+    # sigma/3 kernels
+    EGT = E2 - 2 * (E @ GT.T).astype(jnp.float32) + GT2.T
+
+    EG  = jnp.exp(-jnp.maximum(EG, 0)  / (2 * sigma**2))
+    EE  = jnp.exp(-jnp.maximum(EE, 0)  / (2 * sigma**2))
+    EGT = jnp.exp(-jnp.maximum(EGT, 0) / (2 * (sigma/3)**2))
+
+    return {
+        "EG":  (jnp.sum(EG),  EG.size),
+        "EE":  (jnp.sum(EE),  EE.size),
+        "EGT": (jnp.sum(EGT), EGT.size),
+    }
+
+
+def compute_all_kernels_fused(T, E, G, GT, sigma):
+    # Pass 1: T vs (T, G, GT)
+    TT, TG, TGT, nTT, nTG, nTGT = fused_kernel_pass(T, G, GT, sigma)
+
+    # Pass 2: E vs (E, G, GT)
+    EE, EG, EGT, nEE, nEG, nEGT = fused_kernel_pass(E, G, GT, sigma)
+
+    return {
+        "TT": (TT, nTT),
+        "TG": (TG, nTG),
+        "TGT": (TGT, nTGT),
+
+        "EE": (EE, nEE),
+        "EG": (EG, nEG),
+        "EGT": (EGT, nEGT),
+
+        "GG": (None, None),     # not needed explicitly
+        "GTGT": (None, None),   # handled via TGT / EGT
+    }
