@@ -87,31 +87,53 @@ def kernel_sum_fast(X, Y, sigma):
     return jnp.sum(K), jnp.asarray(K.size, jnp.float32)
 
 
-def kernel_sum_auto(X, Y, sigma, threshold=40_000, block=4096):
+def kernel_sum_auto(X, Y, sigma, *, threshold=40_000, block=4096):
     n, m = X.shape[0], Y.shape[0]
 
+    # =========================
+    # FAST PATH (small matrices)
+    # =========================
     if n <= threshold and m <= threshold:
-        return kernel_sum_fast(X, Y, sigma)
+        X = X.astype(jnp.float16)
+        Y = Y.astype(jnp.float16)
 
-    # fallback (blocked)
+        x2 = jnp.sum(X * X, axis=1, keepdims=True, dtype=jnp.float32)
+        y2 = jnp.sum(Y * Y, axis=1, keepdims=True, dtype=jnp.float32)
+
+        dist2 = x2 - 2 * (X @ Y.T).astype(jnp.float32) + y2.T
+        dist2 = jnp.maximum(dist2, 0.0)
+
+        K = jnp.exp(-dist2 / (2 * sigma**2))
+
+        return (
+            jnp.sum(K),
+            jnp.asarray(K.size, dtype=jnp.float32),
+        )
+
+    # =========================
+    # SAFE PATH (blocked)
+    # =========================
     total = jnp.array(0.0, dtype=jnp.float32)
     count = jnp.array(0.0, dtype=jnp.float32)
 
     for i in range(0, n, block):
         Xi = X[i:i+block].astype(jnp.float16)
-        Xi2 = jnp.sum(Xi * Xi, axis=1, keepdims=True)
+        Xi2 = jnp.sum(Xi * Xi, axis=1, keepdims=True, dtype=jnp.float32)
 
         for j in range(0, m, block):
             Yj = Y[j:j+block].astype(jnp.float16)
-            Yj2 = jnp.sum(Yj * Yj, axis=1, keepdims=True)
+            Yj2 = jnp.sum(Yj * Yj, axis=1, keepdims=True, dtype=jnp.float32)
 
-            dist2 = Xi2 - 2 * Xi @ Yj.T + Yj2.T
+            dist2 = Xi2 - 2 * (Xi @ Yj.T).astype(jnp.float32) + Yj2.T
+            dist2 = jnp.maximum(dist2, 0.0)
+
             K = jnp.exp(-dist2 / (2 * sigma**2))
 
             total += jnp.sum(K)
-            count += jnp.asarray(K.size, jnp.float32)
+            count += jnp.asarray(K.size, dtype=jnp.float32)
 
     return total, count
+
 
 
 
