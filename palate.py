@@ -46,25 +46,8 @@ def compute_palate(
     logger.info("Computing DMMD values...")
     t0 = time.time()
     sigma3 = sigma / 3
-    '''
-    # Precompute once
-    train_p = prepare(train_representations, 1024)
-    test_p = prepare(test_representations, 1024)
-    gen_p = prepare(gen_representations, 1024)
-    gt_p = prepare(gen_gt, 1024)
-    
-    dmmd_train_gen, _ = dmmd_blockwise_jax(*train_p, *gen_p, sigma)
-    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(*test_p, *gen_p, sigma)
 
-    dmmd_train_gen_3, _ = dmmd_blockwise_jax(*train_p, *gt_p, sigma3)
-    dmmd_test_gen_3, _ = dmmd_blockwise_jax(*test_p, *gt_p, sigma3)
-    '''
     fraction = len(gen_gt) / len(gen_representations)
-    dmmd_train_gen, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_representations,
-        sigma=sigma,
-    )
 
     dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
         x=test_representations,
@@ -99,7 +82,6 @@ def compute_palate(
     return {
         "palate": palate,
         "m_palate": m_palate,
-        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
         "dmmd_train_gen_3": dmmd_train_gen_3,
         "dmmd_test_gen_3": dmmd_test_gen_3,
