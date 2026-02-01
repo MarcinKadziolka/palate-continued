@@ -583,6 +583,58 @@ def _kde_single_early_exit(q, D, inv_sigma2, log_tau_N):
 
     return result
 
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+@jax.jit
+def _kde_single_streaming(q, D, inv_sigma2, log_tau_N, block_size=512):
+    """
+    Exact KDE decision with early stopping.
+    Memory O(block_size × dim), exact math.
+    """
+
+    N = D.shape[0]
+    dim = D.shape[1]
+
+    def body(state, i):
+        acc, decided, result = state
+
+        start = i * block_size
+        size = jnp.minimum(block_size, N - start)
+
+        block = lax.dynamic_slice(D, (start, 0), (size, dim))
+        diff  = block - q
+        d2    = jnp.sum(diff * diff * inv_sigma2, axis=1)
+
+        vals = jnp.exp(-0.5 * d2)
+        acc_new = acc + jnp.sum(vals)
+
+        # EARLY ACCEPT (exact)
+        accept = acc_new >= log_tau_N
+
+        # EARLY REJECT (exact upper bound)
+        max_val = jnp.max(vals)
+        remaining = N - (start + size)
+        max_possible = acc_new + remaining * max_val
+        reject = max_possible < log_tau_N
+
+        decided_new = jnp.logical_or(accept, reject)
+        result_new = jnp.where(accept, True, result)
+
+        return (acc_new, decided_new, result_new), None
+
+    n_blocks = (N + block_size - 1) // block_size
+    init = (0.0, False, False)
+
+    (acc, decided, result), _ = lax.scan(
+        body,
+        init,
+        jnp.arange(n_blocks),
+    )
+
+    return result
+
 
 def use_fast_kde(n_query, n_data):
     return (n_query * n_data) <= 400_000_000
@@ -597,29 +649,29 @@ def filter_gen_by_global_kde(gen, D, sigma, tau):
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     return mask_keep, ~mask_keep, logp
+
 @jax.jit
-def filter_gen_by_global_kde_exact(gen, D, sigma, tau):
+def filter_gen_by_global_kde_exact(
+    gen,
+    D,
+    sigma,
+    tau,
+    block_size=512,
+):
     """
-    Exact KDE filter with early exit.
-
-    Args:
-        gen   : [G, D]
-        D     : [N, D]
-        sigma : float or [D]
-        tau   : log-density threshold
-
-    Returns:
-        mask_keep : boolean mask
+    Exact KDE filtering with early exit.
+    GPU-memory safe.
     """
 
     inv_sigma2 = 1.0 / (sigma ** 2)
     log_tau_N = tau + jnp.log(D.shape[0])
 
     def single(q):
-        return _kde_single_early_exit(q, D, inv_sigma2, log_tau_N)
+        return _kde_single_streaming(
+            q, D, inv_sigma2, log_tau_N, block_size
+        )
 
     return jax.vmap(single)(gen)
-
 
 
 def main():
@@ -690,6 +742,7 @@ def main():
             jnp.asarray(D, jnp.float32),
             sigma_D,
             tau,
+            block_size=512,  # 256–1024 works well on 4090
         )
 
         gen_gt = gen_representations[mask_keep]
