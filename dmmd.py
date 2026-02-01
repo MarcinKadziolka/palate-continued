@@ -83,8 +83,13 @@ def kernel_sum(x, y, sigma):
     return jnp.sum(k), k.shape[0] * k.shape[1]
 
 
-def dmmd_from_blocks(a, b, ab):
-    return a[0]/a[1] + b[0]/b[1] - 2 * ab[0]/ab[1]
+def dmmd_from_blocks(Kxx, Kyy, Kxy):
+    return (
+        Kxx[0] / Kxx[1] +
+        Kyy[0] / Kyy[1] -
+        2 * (Kxy[0] / Kxy[1])
+    )
+
 
 def compute_all_kernels(T, E, G, GT, sigma):
     return {
