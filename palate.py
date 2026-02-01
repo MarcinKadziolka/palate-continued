@@ -48,6 +48,11 @@ def compute_palate(
     sigma3 = sigma / 3
 
     fraction = len(gen_gt) / len(gen_representations)
+    dmmd_train_gen, _ = dmmd_blockwise_jax(
+        x=train_representations,
+        y=gen_representations,
+        sigma=sigma,
+    )
 
     dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
         x=test_representations,
@@ -82,6 +87,7 @@ def compute_palate(
     return {
         "palate": palate,
         "m_palate": m_palate,
+        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
         "dmmd_train_gen_3": dmmd_train_gen_3,
         "dmmd_test_gen_3": dmmd_test_gen_3,
