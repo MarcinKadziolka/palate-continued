@@ -193,31 +193,36 @@ import jax
 import jax.numpy as jnp
 
 
-def fused_kernel_E_pass(E, G, GT, sigma):
+import jax
+import jax.numpy as jnp
+
+
+def fused_E_pass(E, G, GT, sigma):
     E = E.astype(jnp.float16)
     G = G.astype(jnp.float16)
     GT = GT.astype(jnp.float16)
 
-    E2 = jnp.sum(E * E, axis=1, keepdims=True, dtype=jnp.float32)
-    G2 = jnp.sum(G * G, axis=1, keepdims=True, dtype=jnp.float32)
+    E2  = jnp.sum(E  * E,  axis=1, keepdims=True, dtype=jnp.float32)
+    G2  = jnp.sum(G  * G,  axis=1, keepdims=True, dtype=jnp.float32)
     GT2 = jnp.sum(GT * GT, axis=1, keepdims=True, dtype=jnp.float32)
 
-    # sigma kernels
-    EG = E2 - 2 * (E @ G.T).astype(jnp.float32) + G2.T
+    # σ kernels
     EE = E2 - 2 * (E @ E.T).astype(jnp.float32) + E2.T
+    EG = E2 - 2 * (E @ G.T).astype(jnp.float32) + G2.T
 
-    # sigma/3 kernels
+    # σ/3 kernel
     EGT = E2 - 2 * (E @ GT.T).astype(jnp.float32) + GT2.T
 
-    EG  = jnp.exp(-jnp.maximum(EG, 0)  / (2 * sigma**2))
     EE  = jnp.exp(-jnp.maximum(EE, 0)  / (2 * sigma**2))
+    EG  = jnp.exp(-jnp.maximum(EG, 0)  / (2 * sigma**2))
     EGT = jnp.exp(-jnp.maximum(EGT, 0) / (2 * (sigma/3)**2))
 
     return {
-        "EG":  (jnp.sum(EG),  EG.size),
         "EE":  (jnp.sum(EE),  EE.size),
+        "EG":  (jnp.sum(EG),  EG.size),
         "EGT": (jnp.sum(EGT), EGT.size),
     }
+
 
 
 def compute_all_kernels_fused(T, E, G, GT, sigma):
