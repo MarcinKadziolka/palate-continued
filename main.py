@@ -538,16 +538,51 @@ def log_kde_fast(query, data, sigma):
 def use_fast_kde(n_query, n_data):
     return (n_query * n_data) <= 400_000_000
 
+@jax.jit
+def kde_filter_fast(query, data, inv_sigma2, tau, block_size=4096):
+    Q = query.shape[0]
+    N = data.shape[0]
 
-def filter_gen_by_global_kde(gen, D, sigma, tau):
-    if use_fast_kde(len(gen), len(D)):
-        logp = log_kde_jax(gen, D, sigma)
-    else:
-        logp = log_kde_jax(gen, D, sigma)
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)
+    acc = jnp.full((Q,), -jnp.inf, dtype=jnp.float16)
 
-    logp = np.asarray(logp)
-    mask_keep = logp >= tau
-    return mask_keep, ~mask_keep, logp
+    n_blocks = (N + block_size - 1) // block_size
+
+    def body(i, state):
+        acc = state
+
+        d = jax.lax.dynamic_slice(
+            data,
+            (i * block_size, 0),
+            (block_size, data.shape[1]),
+        )
+
+        d_norm = jnp.sum(d * d * inv_sigma2, axis=1)
+        cross = (query * inv_sigma2) @ d.T
+
+        contrib = logsumexp(
+            -0.5 * (q_norm + d_norm - 2 * cross),
+            axis=1,
+        )
+
+        acc = jnp.logaddexp(acc, contrib)
+        return acc
+
+    acc = jax.lax.fori_loop(0, n_blocks, body, acc)
+    return acc >= tau
+
+# ============================================================
+# PUBLIC API (DROP-IN REPLACEMENT)
+# ============================================================
+
+def filter_gen_by_global_kde(gen, D, inv_sigma, tau):
+    mask = kde_filter_fast(
+        jnp.asarray(gen, dtype=jnp.float16),
+        jnp.asarray(D, dtype=jnp.float16),
+        jnp.asarray(inv_sigma, dtype=jnp.float16),
+        tau,
+    )
+    return np.asarray(mask), None, None
 
 
 
@@ -613,11 +648,12 @@ def main():
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
+        inv_sigma2 = 1.0 / (sigma_D ** 2)
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
             gen_representations,
             D,
-            sigma_D,
+            inv_sigma,
             tau,
         )
 
