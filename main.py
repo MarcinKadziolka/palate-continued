@@ -648,7 +648,7 @@ def main():
         D = np.vstack([train_representations, test_representations])
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
-        inv_sigma2 = 1.0 / (sigma_D ** 2)
+        inv_sigma = 1.0 / (sigma_D ** 2)
 
         mask_keep, mask_low, _ = filter_gen_by_global_kde(
             gen_representations,
