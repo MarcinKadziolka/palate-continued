@@ -65,7 +65,6 @@ def compute_all_dmmd(
     return (
         palate,
         m_palate,
-        d_train_gen,
         d_test_gen,
         d_train_gt,
         d_test_gt,
