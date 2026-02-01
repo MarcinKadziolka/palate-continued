@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import s, fused_kernel_E_pass
+from dmmd import fused_kernel_E_pass
 import jax
 import jax.numpy as jnp
 from jax import lax
