@@ -31,15 +31,23 @@ def compute_palate(T, E, G, GT, sigma):
     dmmd_train_gt  = dmmd_from_blocks(K["TT"], K["GTGT"], K["TGT"])
     dmmd_test_gt   = dmmd_from_blocks(K["EE"], K["GTGT"], K["EGT"])
 
+    # ✅ THIS is the missing piece
+    denom = (
+        K["EE"].mean() +
+        K["GG"].mean()
+    )
+
     palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
-    m_palate = dmmd_test_gen / 2 + 0.5 * palate
+    m_palate = dmmd_test_gen / (2 * denom) + 0.5 * palate
 
     return {
         "palate": palate,
         "m_palate": m_palate,
+        "denominator_scale": denom,
         "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
         "dmmd_train_gen_3": dmmd_train_gt,
         "dmmd_test_gen_3": dmmd_test_gt,
     }
+
 
