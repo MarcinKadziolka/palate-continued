@@ -21,6 +21,7 @@ from palate_local_knn import compute_global_palate_fast_anisotropic
 import jax
 import jax.numpy as jnp
 from jax import jit
+from jax import lax
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
@@ -535,6 +536,54 @@ def log_kde_fast(query, data, sigma):
 
     return logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
 
+@jax.jit
+def _kde_single_early_exit(q, D, inv_sigma2, log_tau_N):
+    """
+    Exact KDE decision with early stopping.
+
+    Returns:
+        True  → keep sample
+        False → reject sample
+    """
+
+    # squared distances
+    diff = q[None, :] - D
+    d2 = jnp.sum(diff * diff * inv_sigma2, axis=1)
+
+    # sort by increasing distance
+    order = jnp.argsort(d2)
+    d2_sorted = d2[order]
+
+    def body(state, i):
+        acc, decided, result = state
+
+        val = jnp.exp(-0.5 * d2_sorted[i])
+        acc_new = acc + val
+
+        # EARLY ACCEPT
+        accept = acc_new >= log_tau_N
+
+        # EARLY REJECT
+        remaining = (d2_sorted.shape[0] - i - 1)
+        max_possible = acc_new + remaining * val
+        reject = max_possible < log_tau_N
+
+        decided_new = jnp.logical_or(accept, reject)
+        result_new = jnp.where(accept, True, result)
+
+        return (acc_new, decided_new, result_new), None
+
+    init = (0.0, False, False)
+
+    (acc, decided, result), _ = lax.scan(
+        body,
+        init,
+        jnp.arange(d2.shape[0]),
+    )
+
+    return result
+
+
 def use_fast_kde(n_query, n_data):
     return (n_query * n_data) <= 400_000_000
 
@@ -548,6 +597,28 @@ def filter_gen_by_global_kde(gen, D, sigma, tau):
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     return mask_keep, ~mask_keep, logp
+@jax.jit
+def filter_gen_by_global_kde_exact(gen, D, sigma, tau):
+    """
+    Exact KDE filter with early exit.
+
+    Args:
+        gen   : [G, D]
+        D     : [N, D]
+        sigma : float or [D]
+        tau   : log-density threshold
+
+    Returns:
+        mask_keep : boolean mask
+    """
+
+    inv_sigma2 = 1.0 / (sigma ** 2)
+    log_tau_N = tau + jnp.log(D.shape[0])
+
+    def single(q):
+        return _kde_single_early_exit(q, D, inv_sigma2, log_tau_N)
+
+    return jax.vmap(single)(gen)
 
 
 
@@ -614,9 +685,9 @@ def main():
         sigma_D = np.std(D, axis=0).astype(np.float32)
         tau = float(args.tau)
 
-        mask_keep, mask_low, _ = filter_gen_by_global_kde(
-            gen_representations,
-            D,
+        mask_keep = filter_gen_by_global_kde_exact(
+            jnp.asarray(gen_representations, jnp.float32),
+            jnp.asarray(D, jnp.float32),
             sigma_D,
             tau,
         )
