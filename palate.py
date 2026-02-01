@@ -44,66 +44,30 @@ def compute_palate(
             - sigma
     """
     logger.info("Computing DMMD values...")
-    t0 = time.time()
-    sigma3 = sigma / 3
-    '''
-    # Precompute once
-    train_p = prepare(train_representations, 1024)
-    test_p = prepare(test_representations, 1024)
-    gen_p = prepare(gen_representations, 1024)
-    gt_p = prepare(gen_gt, 1024)
-    
-    dmmd_train_gen, _ = dmmd_blockwise_jax(*train_p, *gen_p, sigma)
-    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(*test_p, *gen_p, sigma)
 
-    dmmd_train_gen_3, _ = dmmd_blockwise_jax(*train_p, *gt_p, sigma3)
-    dmmd_test_gen_3, _ = dmmd_blockwise_jax(*test_p, *gt_p, sigma3)
-    '''
-    fraction = len(gen_gt) / len(gen_representations)
-    dmmd_train_gen, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_representations,
-        sigma=sigma,
-    )
+    train = jnp.asarray(train_representations, dtype=jnp.float32)
+    test = jnp.asarray(test_representations, dtype=jnp.float32)
+    gen = jnp.asarray(gen_representations, dtype=jnp.float32)
+    gt = jnp.asarray(gen_gt, dtype=jnp.float32)
 
-    dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_representations,
-        sigma=sigma,
-    )
-
-    dmmd_train_gen_3, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_gt,
-        sigma=sigma3,
-    )
-
-    dmmd_test_gen_3, _ = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_gt,
-        sigma=sigma3,
-    )
-
-    logger.info("DMMD computed in %.3fs", time.time() - t0)
-
-    # ---- Palate formulas ----
-    palate = dmmd_test_gen_3 / (dmmd_test_gen_3 + dmmd_train_gen_3)
-    m_palate = dmmd_test_gen / (2 * denominator_scale) + 0.5 * palate
-
-    logger.info(
-        "Palate computed (m_palate=%.6f, palate=%.6f)",
-        m_palate,
+    (
         palate,
+        m_palate,
+        dmmd_test_gen,
+        dmmd_train_gen_3,
+        dmmd_test_gen_3,
+        denominator_scale,
+    ) = compute_all_dmmd(
+        train, test, gen, gt, sigma
     )
 
     return {
-        "palate": palate,
-        "m_palate": m_palate,
-        "dmmd_train_gen": dmmd_train_gen,
-        "dmmd_test_gen": dmmd_test_gen,
-        "dmmd_train_gen_3": dmmd_train_gen_3,
-        "dmmd_test_gen_3": dmmd_test_gen_3,
-        "denominator_scale": denominator_scale,
+        "palate": float(palate),
+        "m_palate": float(m_palate),
+        "dmmd_test_gen": float(dmmd_test_gen),
+        "dmmd_train_gen_3": float(dmmd_train_gen_3),
+        "dmmd_test_gen_3": float(dmmd_test_gen_3),
+        "denominator_scale": float(denominator_scale),
         "sigma": sigma,
-        "fraction": fraction,
+        "fraction": len(gen_gt) / len(gen_representations),
     }

@@ -34,7 +34,7 @@ def kernel_mean_blockwise(x, y, sigma, block_size=1024):
 # ------------------------------------------------------------
 # MMD
 # ------------------------------------------------------------
-def dmmd_blockwise_jax(x, y, sigma, block_size=512):
+def dmmd_blockwise_jax(x, y, sigma, block_size=1024):
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
     kxy = kernel_mean_blockwise(x, y, sigma, block_size)
@@ -54,7 +54,6 @@ def compute_all_dmmd(
 ):
     sigma3 = sigma / 3
 
-    d_train_gen, _ = dmmd_blockwise_jax(train, gen, sigma)
     d_test_gen, denom = dmmd_blockwise_jax(test, gen, sigma)
 
     d_train_gt, _ = dmmd_blockwise_jax(train, gt, sigma3)

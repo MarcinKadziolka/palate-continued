@@ -594,7 +594,7 @@ def main():
             test_path, model, num_workers, device, args
         )
         logger.info("Finished loading/computing test representations")
-        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+        logger.info(f"Enumerating paths to generated samples: {gen_path:s}")
 
     for gen_path in gen_paths:
 
