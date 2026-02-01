@@ -25,16 +25,15 @@ def prepare(x, block_size):
 def compute_palate(T, E, G, GT, sigma):
     K = compute_all_kernels(T, E, G, GT, sigma)
 
-    dmmd_train_gen = dmmd_from_blocks(K["TT"], K["GG"], K["TG"])
     dmmd_test_gen  = dmmd_from_blocks(K["EE"], K["GG"], K["EG"])
 
     dmmd_train_gt  = dmmd_from_blocks(K["TT"], K["GTGT"], K["TGT"])
     dmmd_test_gt   = dmmd_from_blocks(K["EE"], K["GTGT"], K["EGT"])
 
-    # ✅ THIS is the missing piece
+    # ✅ Correct denominator (matches original)
     denom = (
-        K["EE"].mean() +
-        K["GG"].mean()
+        K["EE"][0] / K["EE"][1] +
+        K["GG"][0] / K["GG"][1]
     )
 
     palate = dmmd_test_gt / (dmmd_test_gt + dmmd_train_gt)
@@ -44,10 +43,10 @@ def compute_palate(T, E, G, GT, sigma):
         "palate": palate,
         "m_palate": m_palate,
         "denominator_scale": denom,
-        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
         "dmmd_train_gen_3": dmmd_train_gt,
         "dmmd_test_gen_3": dmmd_test_gt,
     }
+
 
 
