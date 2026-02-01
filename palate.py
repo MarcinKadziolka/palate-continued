@@ -29,7 +29,7 @@ def self_kernel(X, sigma):
     return jnp.sum(K), K.size
 
 
-def compute_palate_fast_minimal(E, G, GT, sigma):
+def compute_palate(E, G, GT, sigma):
     # main kernels
     K = fused_kernel_E_pass(E, G, GT, sigma)
 
