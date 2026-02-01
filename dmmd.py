@@ -71,18 +71,38 @@ def compute_all_dmmd(
         denom,
     )
 
-@jax.jit
-def kernel_sum(x, y, sigma):
-    x2 = jnp.sum(x * x, axis=1, keepdims=True)
-    y2 = jnp.sum(y * y, axis=1, keepdims=True)
+def kernel_sum_auto(X, Y, sigma, block=4096, threshold=40_000):
+    n = X.shape[0]
+    m = Y.shape[0]
 
-    dist2 = x2 - 2 * x @ y.T + y2.T
-    k = jnp.exp(-dist2 / (2 * sigma**2))
+    if n <= threshold and m <= threshold:
+        # FAST PATH (full matrix, no loops)
+        x2 = jnp.sum(X * X, axis=1, keepdims=True)
+        y2 = jnp.sum(Y * Y, axis=1, keepdims=True)
+        dist2 = x2 - 2 * X @ Y.T + y2.T
+        K = jnp.exp(-dist2 / (2 * sigma**2))
+        return jnp.sum(K), jnp.asarray(K.size, dtype=jnp.float32)
 
-    return (
-        jnp.sum(k),
-        jnp.asarray(k.shape[0] * k.shape[1], dtype=jnp.float32)
-    )
+    # SAFE PATH (blocked)
+    total = 0.0
+    count = 0
+
+    for i in range(0, n, block):
+        Xi = X[i:i+block]
+        Xi2 = jnp.sum(Xi * Xi, axis=1, keepdims=True)
+
+        for j in range(0, m, block):
+            Yj = Y[j:j+block]
+            Yj2 = jnp.sum(Yj * Yj, axis=1, keepdims=True)
+
+            dist2 = Xi2 - 2 * Xi @ Yj.T + Yj2.T
+            K = jnp.exp(-dist2 / (2 * sigma**2))
+
+            total += jnp.sum(K)
+            count += K.size
+
+    return total, count
+
 
 def dmmd_from_blocks(Kxx, Kyy, Kxy):
     return (
@@ -94,14 +114,15 @@ def dmmd_from_blocks(Kxx, Kyy, Kxy):
 
 def compute_all_kernels(T, E, G, GT, sigma):
     return {
-        "TT": kernel_sum(T, T, sigma),
-        "EE": kernel_sum(E, E, sigma),
-        "GG": kernel_sum(G, G, sigma),
-        "GTGT": kernel_sum(GT, GT, sigma),
+        "TT": kernel_sum_auto(T, T, sigma),
+        "EE": kernel_sum_auto(E, E, sigma),
+        "GG": kernel_sum_auto(G, G, sigma),
+        "GTGT": kernel_sum_auto(GT, GT, sigma),
 
-        "TG": kernel_sum(T, G, sigma),
-        "EG": kernel_sum(E, G, sigma),
-        "TGT": kernel_sum(T, GT, sigma),
-        "EGT": kernel_sum(E, GT, sigma),
+        "TG": kernel_sum_auto(T, G, sigma),
+        "EG": kernel_sum_auto(E, G, sigma),
+        "TGT": kernel_sum_auto(T, GT, sigma),
+        "EGT": kernel_sum_auto(E, GT, sigma),
     }
+
 
