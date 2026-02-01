@@ -71,21 +71,22 @@ def compute_all_dmmd(
         denom,
     )
 
-def kernel_sum_auto(X, Y, sigma, block=4096, threshold=40_000):
-    n = X.shape[0]
-    m = Y.shape[0]
+def kernel_sum_auto(X, Y, sigma, block=2048, threshold=40_000):
+    n, m = X.shape[0], Y.shape[0]
 
     if n <= threshold and m <= threshold:
-        # FAST PATH (full matrix, no loops)
         x2 = jnp.sum(X * X, axis=1, keepdims=True)
         y2 = jnp.sum(Y * Y, axis=1, keepdims=True)
         dist2 = x2 - 2 * X @ Y.T + y2.T
         K = jnp.exp(-dist2 / (2 * sigma**2))
-        return jnp.sum(K), jnp.asarray(K.size, dtype=jnp.float32)
 
-    # SAFE PATH (blocked)
+        return (
+            jnp.sum(K),
+            jnp.asarray(K.size, dtype=jnp.float32)  # ✅ FIX
+        )
+
     total = 0.0
-    count = 0
+    count = 0.0   # ← float, NOT int
 
     for i in range(0, n, block):
         Xi = X[i:i+block]
@@ -99,9 +100,10 @@ def kernel_sum_auto(X, Y, sigma, block=4096, threshold=40_000):
             K = jnp.exp(-dist2 / (2 * sigma**2))
 
             total += jnp.sum(K)
-            count += K.size
+            count += jnp.asarray(K.size, dtype=jnp.float32)  # ✅ FIX
 
     return total, count
+
 
 
 def dmmd_from_blocks(Kxx, Kyy, Kxy):
