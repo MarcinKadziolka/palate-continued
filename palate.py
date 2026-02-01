@@ -20,8 +20,14 @@ def prepare(x, block_size):
     x_pad, xmask, nx = pad_to_block(x, block_size)
     x2 = jnp.sum(x_pad * x_pad, axis=1)
     return x_pad, x2, xmask, nx
+def pad_to_block(x, block_size=4096):
+    n, d = x.shape
+    pad = (-n) % block_size
+    if pad == 0:
+        return x
+    return jnp.pad(x, ((0, pad), (0, 0)))
 
-
+_BLOCK_SIZE = 4096
 def compute_palate(
     *,
     train_representations: np.ndarray,
@@ -46,31 +52,51 @@ def compute_palate(
     logger.info("Computing DMMD values...")
     t0 = time.time()
     sigma3 = sigma / 3
+    n_train = train_representations.shape[0]
+    n_test  = test_representations.shape[0]
+    n_gen   = gen_representations.shape[0]
+    n_gt    = gen_gt.shape[0]
+    train_p = pad_to_block(jnp.asarray(train_representations))
+    test_p  = pad_to_block(jnp.asarray(test_representations))
+    gen_p   = pad_to_block(jnp.asarray(gen_representations))
+    gt_p    = pad_to_block(jnp.asarray(gen_gt))
 
     fraction = len(gen_gt) / len(gen_representations)
-    dmmd_train_gen, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_representations,
-        sigma=sigma,
+    
+    # warmup
+    _ = dmmd_blockwise_jax(
+        train_p[:_BLOCK_SIZE],
+        gen_p[:_BLOCK_SIZE],
+        sigma,
+        n_x=_BLOCK_SIZE,
+        n_y=_BLOCK_SIZE,
     )
 
+    # main values
     dmmd_test_gen, denominator_scale = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_representations,
-        sigma=sigma,
+         x=test_p,
+         y=gen_p,
+         sigma=sigma,
+         n_x=n_test,
+         n_y=n_gen,
     )
 
     dmmd_train_gen_3, _ = dmmd_blockwise_jax(
-        x=train_representations,
-        y=gen_gt,
-        sigma=sigma3,
+         x=train_p,
+         y=gt_p,
+         sigma=sigma3,
+         n_x=n_train,
+         n_y=n_gt,
     )
 
     dmmd_test_gen_3, _ = dmmd_blockwise_jax(
-        x=test_representations,
-        y=gen_gt,
-        sigma=sigma3,
+         x=test_p,
+         y=gt_p,
+         sigma=sigma3,
+         n_x=n_test,
+         n_y=n_gt,
     )
+
 
     logger.info("DMMD computed in %.3fs", time.time() - t0)
 
@@ -87,7 +113,6 @@ def compute_palate(
     return {
         "palate": palate,
         "m_palate": m_palate,
-        "dmmd_train_gen": dmmd_train_gen,
         "dmmd_test_gen": dmmd_test_gen,
         "dmmd_train_gen_3": dmmd_train_gen_3,
         "dmmd_test_gen_3": dmmd_test_gen_3,
