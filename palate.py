@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import fused_kernel_E_pass
+from dmmd import fused_E_pass
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -29,13 +29,29 @@ def self_kernel(X, sigma):
     return jnp.sum(K), K.size
 
 
-def compute_palate(E, G, GT, sigma):
-    # main kernels
-    K = fused_kernel_E_pass(E, G, GT, sigma)
+def train_gt_kernel(T, GT, sigma):
+    T  = T.astype(jnp.float16)
+    GT = GT.astype(jnp.float16)
 
-    # self kernels
+    T2  = jnp.sum(T  * T,  axis=1, keepdims=True, dtype=jnp.float32)
+    GT2 = jnp.sum(GT * GT, axis=1, keepdims=True, dtype=jnp.float32)
+
+    D = T2 - 2 * (T @ GT.T).astype(jnp.float32) + GT2.T
+    K = jnp.exp(-jnp.maximum(D, 0) / (2 * (sigma/3)**2))
+
+    return jnp.sum(K), K.size
+
+
+def compute_palate(E, G, GT, T, sigma):
+    # Main fused pass
+    K = fused_E_pass(E, G, GT, sigma)
+
+    # Self kernels
     GG, nGG = self_kernel(G, sigma)
     GTGT, nGTGT = self_kernel(GT, sigma / 3)
+
+    # Train × GT
+    TGT, nTGT = train_gt_kernel(T, GT, sigma)
 
     # DMMDs
     dmmd_test_gen = (
@@ -44,27 +60,22 @@ def compute_palate(E, G, GT, sigma):
         - 2 * (K["EG"][0] / K["EG"][1])
     )
 
-    dmmd_test_gt = (
+    dmmd_train_gt = (
         K["EE"][0] / K["EE"][1]
         + GTGT / nGTGT
-        - 2 * (K["EGT"][0] / K["EGT"][1])
+        - 2 * (TGT / nTGT)
     )
 
-    denominator = (
-        K["EE"][0] / K["EE"][1]
-        + GG / nGG
-    )
-
-    palate = dmmd_test_gt / (dmmd_test_gt + 0.0)  # train term removed
-    m_palate = dmmd_test_gen / (2 * denominator) + 0.5 * palate
+    palate = dmmd_train_gt / (dmmd_train_gt + 1e-12)
+    m_palate = dmmd_test_gen / (2 * (K["EE"][0] / K["EE"][1] + GG / nGG)) + 0.5 * palate
 
     return {
         "palate": palate,
         "m_palate": m_palate,
         "dmmd_test_gen": dmmd_test_gen,
-        "dmmd_test_gen_3": dmmd_test_gt,
-        "denominator_scale": denominator,
+        "dmmd_train_gen_3": dmmd_train_gt,
     }
+
 
 
 
