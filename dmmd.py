@@ -34,6 +34,7 @@ def kernel_mean_blockwise(x, y, sigma, block_size=1024):
 # ------------------------------------------------------------
 # MMD
 # ------------------------------------------------------------
+@jax.jit(static_argnums=(3,))
 def dmmd_blockwise_jax(x, y, sigma, block_size=512):
     kxx = kernel_mean_blockwise(x, x, sigma, block_size)
     kyy = kernel_mean_blockwise(y, y, sigma, block_size)
