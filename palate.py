@@ -8,14 +8,6 @@ from jax import lax
 
 logger = logging.getLogger(__name__)
 
-def pad_to_block(x, block_size):
-    n, d = x.shape
-    pad = (-n) % block_size
-    x_pad = jnp.pad(x, ((0, pad), (0, 0)))
-    mask = jnp.arange(n + pad) < n
-    return x_pad, mask, n
-
-
 def prepare(x, block_size):
     x_pad, xmask, nx = pad_to_block(x, block_size)
     x2 = jnp.sum(x_pad * x_pad, axis=1)
