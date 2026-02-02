@@ -11,7 +11,6 @@ from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
 from scipy.special import logsumexp
 
-from jaxlib.xla_client import Array
 import numpy as np
 import torch
 from palate_local_knn import compute_local_palate_knn
@@ -216,13 +215,13 @@ def create_unique_exp_dir() -> str:
 
 
 def write_to_txt(
-    scores: dict[str, Array | str],
-    output_dir: str,
-    model: DinoEncoder,
-    train_path: str,
-    test_path: str,
-    gen_path: str,
-    nsample: int,
+    scores,
+    output_dir,
+    model,
+    train_path,
+    test_path,
+    gen_path,
+    nsample,
     sigma,
 ):
     model_arch = model.arch_str if model is not None else "npz"
@@ -238,7 +237,7 @@ def write_to_txt(
 
 
 def write_to_csv(
-    scores: dict[str, Array | str],
+    scores,
     output_dir,
     model,
     train_name,
