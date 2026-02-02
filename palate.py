@@ -72,22 +72,29 @@ def compute_palate(
          n_x=n_test,
          n_y=n_gen,
     )
+    if fraction > 0:
+        dmmd_train_gen_3, _ = dmmd_blockwise_jax(
+             x=train_p,
+             y=gt_p,
+             sigma=sigma3,
+             n_x=n_train,
+             n_y=n_gt,
+        )
 
-    dmmd_train_gen_3, _ = dmmd_blockwise_jax(
-         x=train_p,
-         y=gt_p,
-         sigma=sigma3,
-         n_x=n_train,
-         n_y=n_gt,
-    )
-
-    dmmd_test_gen_3, _ = dmmd_blockwise_jax(
-         x=test_p,
-         y=gt_p,
-         sigma=sigma3,
-         n_x=n_test,
-         n_y=n_gt,
-    )
+        dmmd_test_gen_3, _ = dmmd_blockwise_jax(
+             x=test_p,
+             y=gt_p,
+             sigma=sigma3,
+             n_x=n_test,
+             n_y=n_gt,
+        )
+    else:
+        return {
+            "dmmd_test_gen": dmmd_test_gen,
+            "denominator_scale": denominator_scale,
+            "sigma": sigma,
+            "fraction": fraction,
+        }
 
 
     logger.info("DMMD computed in %.3fs", time.time() - t0)
