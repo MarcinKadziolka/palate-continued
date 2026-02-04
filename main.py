@@ -61,6 +61,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--distortion",
+    type=float,
+    default="none",
+    help="Distortion to apply to images",
+)
+
+parser.add_argument(
     "-bs",
     "--batch_size",
     type=int,
@@ -199,6 +206,7 @@ def get_dataloader_from_path(
         seed=args.seed,
         sample_w_replacement=sample_w_replacement,
         transform=lambda x: model_transform(x),
+        distortion=args.distortion
     )
     return dataloader
 
