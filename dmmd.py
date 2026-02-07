@@ -51,9 +51,44 @@ def kernel_mean_blockwise(x, y, sigma, n_real, m_real):
     return total / count
 
 @jax.jit
+def kernel_mean_full(x, y, sigma):
+    x = x.astype(jnp.float32)
+    y = y.astype(jnp.float32)
+    sigma = jnp.float32(sigma)
+
+    x2 = jnp.sum(x * x, axis=1, keepdims=True)      # [n,1]
+    y2 = jnp.sum(y * y, axis=1, keepdims=True).T    # [1,m]
+
+    dist = x2 + y2 - 2.0 * (x @ y.T)                # [n,m]
+    k = jnp.exp(-dist / (2.0 * sigma * sigma))
+    return jnp.mean(k)
+
+
+@jax.jit
 def dmmd_blockwise_jax(x, y, sigma, n_x, n_y):
     kxx = kernel_mean_blockwise(x, x, sigma, n_x, n_x)
     kyy = kernel_mean_blockwise(y, y, sigma, n_y, n_y)
     kxy = kernel_mean_blockwise(x, y, sigma, n_x, n_y)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
+
+@jax.jit
+def dmmd_auto_jit(x, y, sigma, n_x, n_y, threshold=20000):
+    nmax = jnp.maximum(n_x, n_y)
+
+    def full_path(_):
+        x_r = x[:n_x]
+        y_r = y[:n_y]
+
+        kxx = kernel_mean_full(x_r, x_r, sigma)
+        kyy = kernel_mean_full(y_r, y_r, sigma)
+        kxy = kernel_mean_full(x_r, y_r, sigma)
+
+        dmmd = kxx + kyy - 2.0 * kxy
+        denom = kxx + kyy
+        return dmmd, denom
+
+    def block_path(_):
+        return dmmd_blockwise_jax(x, y, sigma, n_x, n_y)
+
+    return lax.cond(nmax <= threshold, full_path, block_path, operand=None)
 

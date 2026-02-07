@@ -467,13 +467,29 @@ def log_kde_jax(query, data, sigma, batch_size=1024):
 
     return jnp.concatenate(outputs, axis=0)
 
+@jax.jit
+def log_kde_full(query, data, sigma):
+    query = query.astype(jnp.float32)
+    data = data.astype(jnp.float32)
+    sigma = jnp.asarray(sigma, dtype=jnp.float32)
+
+    inv_sigma2 = 1.0 / (sigma * sigma)
+
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)  # [Q,1]
+    d_norm = jnp.sum(data * data * inv_sigma2, axis=1)                  # [N]
+    cross = (query * inv_sigma2) @ data.T                               # [Q,N]
+
+    dist = q_norm + d_norm - 2.0 * cross
+    return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+
+
 import jax
 from jax import lax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 def filter_gen_by_global_kde(gen, D, sigma, tau):
-    logp = log_kde_jax(gen, D, sigma)
+    logp = log_kde_full(gen, D, sigma)
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     return mask_keep, ~mask_keep, logp
