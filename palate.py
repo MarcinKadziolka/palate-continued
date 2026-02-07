@@ -1,7 +1,7 @@
 import time
 import logging
 import numpy as np
-from dmmd import dmmd_auto_jit
+from dmmd import dmmd_auto
 import jax
 import jax.numpy as jnp
 from jax import lax
@@ -56,7 +56,7 @@ def compute_palate(
     fraction = len(gen_gt) / len(gen_representations)
     
     # warmup
-    _ = dmmd_auto_jit(
+    _ = dmmd_auto(
         train_p[:_BLOCK_SIZE],
         gen_p[:_BLOCK_SIZE],
         sigma,
@@ -65,7 +65,7 @@ def compute_palate(
     )
 
     # main values
-    dmmd_test_gen, denominator_scale = dmmd_auto_jit(
+    dmmd_test_gen, denominator_scale = dmmd_auto(
          x=test_p,
          y=gen_p,
          sigma=sigma,
@@ -73,7 +73,7 @@ def compute_palate(
          n_y=n_gen,
     )
     if fraction > 0:
-        dmmd_train_gen_3, _ = dmmd_auto_jit(
+        dmmd_train_gen_3, _ = dmmd_auto(
              x=train_p,
              y=gt_p,
              sigma=sigma3,
@@ -81,7 +81,7 @@ def compute_palate(
              n_y=n_gt,
         )
 
-        dmmd_test_gen_3, _ = dmmd_auto_jit(
+        dmmd_test_gen_3, _ = dmmd_auto(
              x=test_p,
              y=gt_p,
              sigma=sigma3,

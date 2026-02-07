@@ -71,11 +71,8 @@ def dmmd_blockwise_jax(x, y, sigma, n_x, n_y):
     kxy = kernel_mean_blockwise(x, y, sigma, n_x, n_y)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
 
-@jax.jit
-def dmmd_auto_jit(x, y, sigma, n_x, n_y, threshold=20000):
-    nmax = jnp.maximum(n_x, n_y)
-
-    def full_path(_):
+def dmmd_auto(x, y, sigma, n_x, n_y, threshold=20000):
+    if max(n_x, n_y) <= threshold:
         x_r = x[:n_x]
         y_r = y[:n_y]
 
@@ -87,8 +84,5 @@ def dmmd_auto_jit(x, y, sigma, n_x, n_y, threshold=20000):
         denom = kxx + kyy
         return dmmd, denom
 
-    def block_path(_):
-        return dmmd_blockwise_jax(x, y, sigma, n_x, n_y)
-
-    return lax.cond(nmax <= threshold, full_path, block_path, operand=None)
+    return dmmd_blockwise_jax(x, y, sigma, n_x, n_y)
 
