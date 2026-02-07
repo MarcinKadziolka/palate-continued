@@ -481,6 +481,65 @@ def log_kde_full(query, data, sigma):
 
     dist = q_norm + d_norm - 2.0 * cross
     return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+@jax.jit
+def log_kde_exact_scan(query, data, sigma, block=4096):
+    """
+    Exact KDE:
+      logp_i = log( mean_j exp(-0.5 * dist(i,j)) )
+
+    query: [Q, D]
+    data:  [N, D]
+    sigma: [D] or scalar
+    """
+
+    query = query.astype(jnp.float32)
+    data  = data.astype(jnp.float32)
+    sigma = jnp.asarray(sigma, dtype=jnp.float32)
+
+    inv_sigma2 = 1.0 / (sigma * sigma)
+
+    Q, D = query.shape
+    N = data.shape[0]
+
+    # Precompute query terms once
+    q_scaled = query * inv_sigma2
+    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)  # [Q,1]
+
+    # pad data to multiple of block
+    pad = (-N) % block
+    data_pad = jnp.pad(data, ((0, pad), (0, 0)))
+    Nb = data_pad.shape[0] // block
+
+    data_blocks = data_pad.reshape(Nb, block, D)
+
+    def step(logacc, db):
+        # db: [block, D]
+        d_norm = jnp.sum(db * db * inv_sigma2, axis=1)  # [block]
+
+        # [Q, block]
+        cross = q_scaled @ db.T
+
+        dist = q_norm + d_norm[None, :] - 2.0 * cross
+        logw = -0.5 * dist  # [Q, block]
+
+        # logsumexp over this block
+        block_lse = jax.scipy.special.logsumexp(logw, axis=1)  # [Q]
+
+        # combine across blocks: log(exp(a)+exp(b)) = logaddexp(a,b)
+        logacc = jnp.logaddexp(logacc, block_lse)
+        return logacc, None
+
+    # initialize accumulator to -inf
+    logacc0 = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+
+    logsum, _ = lax.scan(step, logacc0, data_blocks)
+
+    # subtract log(N) for mean
+    return logsum - jnp.log(jnp.float32(N))
 
 
 import jax
@@ -489,7 +548,7 @@ import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
 def filter_gen_by_global_kde(gen, D, sigma, tau):
-    logp = log_kde_full(gen, D, sigma)
+    logp = log_kde_exact_scan(gen, D, sigma)
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     return mask_keep, ~mask_keep, logp
