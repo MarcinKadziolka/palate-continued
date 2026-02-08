@@ -83,10 +83,10 @@ class ImagePathDataset(Dataset):
             resize = torchvision.transforms.Resize((196, 196))  # Resize to 224x224
             img = resize(img)
         elif self.distortion == "center_crop30":
-            center_crop_30 = torchvision.transforms.CenterCrop(30)  # Center crop to 30x30
+            center_crop_30 = torchvision.transforms.CenterCrop(30)
             img = center_crop_30(img)
         elif self.distortion == "center_crop28":
-            center_crop_28 = torchvision.transforms.CenterCrop(28)  # Center crop to 30x30
+            center_crop_28 = torchvision.transforms.CenterCrop(28)
             img = center_crop_28(img)
         elif self.distortion == "color_distort":
             color_distort = torchvision.transforms.ColorJitter()  # Random color distortion
