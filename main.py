@@ -555,10 +555,7 @@ from jax import lax
 import jax.numpy as jnp
 from jax.scipy.special import logsumexp
 
-def filter_gen_by_global_kde(gen, D, sigma, tau, threshold=20000):
-    gen = jnp.asarray(gen, dtype=jnp.float32)
-    D   = jnp.asarray(D, dtype=jnp.float32)
-
+def filter_gen_by_global_kde(gen, D, sigma, tau, threshold=40000):
     if D.shape[0] > threshold:
         logp = log_kde_jax(gen, D, sigma)          # your batched version
     else:
