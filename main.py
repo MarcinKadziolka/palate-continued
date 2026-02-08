@@ -56,7 +56,7 @@ parser.add_argument(
 parser.add_argument(
     "--sigma",
     type=float,
-    default=0.01,
+    default=10.5,
     help="Sigma to use in blockwise_kernel_mean in dmmd.py",
 )
 
@@ -96,7 +96,7 @@ parser.add_argument(
 parser.add_argument(
     "--tau",
     type=float,
-    default=-9.0,
+    default=-300.0,
     help="Explicit global KDE log-density threshold. Overrides --kde_percentile."
 )
 
@@ -450,7 +450,7 @@ def _kde_chunk(query, data, inv_sigma2):
     dist = q_norm + d_norm - 2.0 * cross
     return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
 
-def log_kde_jax(query, data, sigma, batch_size=1024):
+def log_kde_jax(query, data, sigma, batch_size=16):
     """
     Fast KDE using JAX with batching.
     """
