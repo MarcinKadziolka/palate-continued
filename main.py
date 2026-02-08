@@ -467,19 +467,27 @@ def log_kde_jax(query, data, sigma, batch_size=1024):
 
     return jnp.concatenate(outputs, axis=0)
 
+
+
+import jax
+import jax.numpy as jnp
+from jax import lax
+
+
 @jax.jit
 def log_kde_exact_scan(query, data, sigma, block=4096):
     """
-    Exact KDE:
+    Exact KDE with streaming logsumexp over blocks:
+
       logp_i = log( mean_j exp(-0.5 * dist(i,j)) )
 
     query: [Q, D]
     data:  [N, D]
-    sigma: [D] or scalar
+    sigma: scalar or [D]
     """
 
-    query = query.astype(jnp.float32)
-    data  = data.astype(jnp.float32)
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data  = jnp.asarray(data,  dtype=jnp.float32)
     sigma = jnp.asarray(sigma, dtype=jnp.float32)
 
     inv_sigma2 = 1.0 / (sigma * sigma)
@@ -487,41 +495,59 @@ def log_kde_exact_scan(query, data, sigma, block=4096):
     Q, D = query.shape
     N = data.shape[0]
 
-    # Precompute query terms once
-    q_scaled = query * inv_sigma2
-    q_norm = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)  # [Q,1]
+    # Precompute query terms
+    q_scaled = query * inv_sigma2                        # [Q, D]
+    q_norm   = jnp.sum(query * query * inv_sigma2, axis=1, keepdims=True)  # [Q, 1]
 
-    # pad data to multiple of block
-    pad = (-N) % block
-    data_pad = jnp.pad(data, ((0, pad), (0, 0)))
-    Nb = data_pad.shape[0] // block
+    # number of blocks
+    Nb = (N + block - 1) // block
 
-    data_blocks = data_pad.reshape(Nb, block, D)
+    def step(carry, bi):
+        """
+        carry = (m, s)
+          m: [Q] running max
+          s: [Q] running sum of exp(logw - m)
+        """
+        m, s = carry
 
-    def step(logacc, db):
-        # db: [block, D]
+        start = bi * block
+        stop  = jnp.minimum(start + block, N)
+        db = lax.dynamic_slice(data, (start, 0), (block, D))  # always [block, D]
+
+        # mask out rows past N in last block
+        valid = (jnp.arange(block) + start) < N   # [block]
+
         d_norm = jnp.sum(db * db * inv_sigma2, axis=1)  # [block]
+        cross  = q_scaled @ db.T                         # [Q, block]
 
-        # [Q, block]
-        cross = q_scaled @ db.T
+        dist = q_norm + d_norm[None, :] - 2.0 * cross    # [Q, block]
+        logw = -0.5 * dist                               # [Q, block]
 
-        dist = q_norm + d_norm[None, :] - 2.0 * cross
-        logw = -0.5 * dist  # [Q, block]
+        # apply mask: invalid entries become -inf so they don't contribute
+        logw = jnp.where(valid[None, :], logw, -jnp.inf)
 
-        # logsumexp over this block
-        block_lse = jax.scipy.special.logsumexp(logw, axis=1)  # [Q]
+        # block max and block sumexp
+        bmax = jnp.max(logw, axis=1)                     # [Q]
+        bsum = jnp.sum(jnp.exp(logw - bmax[:, None]), axis=1)  # [Q]
 
-        # combine across blocks: log(exp(a)+exp(b)) = logaddexp(a,b)
-        logacc = jnp.logaddexp(logacc, block_lse)
-        return logacc, None
+        # streaming logsumexp merge:
+        new_m = jnp.maximum(m, bmax)
+        new_s = s * jnp.exp(m - new_m) + bsum * jnp.exp(bmax - new_m)
 
-    # initialize accumulator to -inf
-    logacc0 = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+        return (new_m, new_s), None
 
-    logsum, _ = lax.scan(step, logacc0, data_blocks)
+    # init running logsumexp accumulator
+    m0 = jnp.full((Q,), -jnp.inf, dtype=jnp.float32)
+    s0 = jnp.zeros((Q,), dtype=jnp.float32)
 
-    # subtract log(N) for mean
+    (m, s), _ = lax.scan(step, (m0, s0), jnp.arange(Nb))
+
+    # final logsumexp
+    logsum = m + jnp.log(s)
+
+    # mean over N
     return logsum - jnp.log(jnp.float32(N))
+
 
 
 import jax
