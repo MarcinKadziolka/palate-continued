@@ -62,7 +62,7 @@ parser.add_argument(
 
 parser.add_argument(
     "--distortion",
-    type=float,
+    type=str,
     default="none",
     help="Distortion to apply to images",
 )
@@ -513,33 +513,25 @@ def main():
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
-    if args.load_npz:
-        logger.info("Loading representations from NPZ files")
 
+    if args.load_npz:
+        logger.info("Loading test and train representations from NPZ files")
         train_representations = load_reps_from_npz(train_path)
         test_representations = load_reps_from_npz(test_path)
     else:
-
+        logger.info("Computing representations for train and test")
         train_representations = compute_representations(
             train_path, model, num_workers, device, args
         )
-        logger.info("Finished loading/computing train representations")
-
         test_representations = compute_representations(
             test_path, model, num_workers, device, args
         )
-        logger.info("Finished loading/computing test representations")
-        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
 
     for gen_path in gen_paths:
 
-        if args.load_npz:
-            gen_representations = load_reps_from_npz(gen_path)
-        else:
-            gen_representations = compute_representations(
-                gen_path, model, num_workers, device, args
-            )
-
+        gen_representations = compute_representations(
+            gen_path, model, num_workers, device, args
+        )
         # ==============================
         # KDE FILTERING (timed)
         # ==============================
