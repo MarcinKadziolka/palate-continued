@@ -48,13 +48,14 @@ def compute_palate(
     n_test  = test_representations.shape[0]
     n_gen   = gen_representations.shape[0]
     n_gt    = gen_gt.shape[0]
+    logger.info(f"{n_train=}, {n_test=}, {n_gen=}, {n_gt=}")
     train_p = pad_to_block(jnp.asarray(train_representations))
     test_p  = pad_to_block(jnp.asarray(test_representations))
     gen_p   = pad_to_block(jnp.asarray(gen_representations))
     gt_p    = pad_to_block(jnp.asarray(gen_gt))
 
     fraction = len(gen_gt) / len(gen_representations)
-    
+    logger.info(f"{fraction=}") 
     # warmup
     _ = dmmd_blockwise_jax(
         train_p[:_BLOCK_SIZE],
