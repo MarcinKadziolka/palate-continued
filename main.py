@@ -133,7 +133,7 @@ parser.add_argument(
     type=float,
     nargs="+",
     default=5.0,
-    help="List of percentiles for global KDE threshold grid search (in %).",
+    help="List of percentiles for global KDE threshold grid search (in %%).",
 )
 
 
