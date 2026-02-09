@@ -21,14 +21,14 @@ def get_representations(
 ) -> np.ndarray:
     """Extracts features from all images in DataLoader given model.
 
-    Params:
-    -- model       : Instance of Encoder such as inception or CLIP or dinov2
-    -- DataLoader  : DataLoader containing image files, or torchvision.dataset
+    Args:
+        model: Instance of Encoder such as inception or CLIP or dinov2
+        DataLoader: DataLoader containing image files, or torchvision.dataset
 
     Returns:
-    -- A numpy array of dimension (num images, dims) that contains the
-       activations of the given tensor when feeding inception with the
-       query tensor.
+        A numpy array of dimension (num images, dims) that contains the
+            activations of the given tensor when feeding inception with the
+            query tensor.
     """
     logger.info(
         f"Computing representations for {DataLoader.path} using {model.__class__.__name__}."
