@@ -1,32 +1,26 @@
 # This script contains modified parts of code from repository: https://github.com/layer6ai-labs/dgm-eval
 
-import time
 import csv
-import dataclasses
 import logging
 import os
 import pathlib
+import time
 import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
-from scipy.special import logsumexp
 
-import numpy as np
-import torch
-from palate_local_knn import compute_local_palate_knn
-from palate_local_knn import compute_global_palate_fast
-from palate_local_knn import compute_global_palate_fast_normalized
-from palate_local_knn import compute_global_palate_fast_anisotropic
 import jax
 import jax.numpy as jnp
+import numpy as np
+import torch
 from jax import jit
+
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
 from palate import compute_palate
 from representations import get_representations
-from dmmd import dmmd_blockwise_jax
 
 logger = logging.getLogger(__name__)
 
@@ -437,7 +431,6 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
             f.write(f"{arg}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
 
-from scipy.special import logsumexp
 
 @jit
 def _kde_chunk(query, data, inv_sigma2):
@@ -469,10 +462,7 @@ def log_kde_jax(query, data, sigma, batch_size=16):
 
     return jnp.concatenate(outputs, axis=0)
 
-import jax
-from jax import lax
-import jax.numpy as jnp
-from jax.scipy.special import logsumexp
+
 
 def filter_gen_by_global_kde(gen, D, sigma, tau):
     logp = log_kde_jax(gen, D, sigma)
