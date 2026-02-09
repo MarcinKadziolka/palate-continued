@@ -104,7 +104,6 @@ parser.add_argument(
 parser.add_argument(
     "--dino_ckpt",
     type=str,
-    default="/shared/results/gmdziarm/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth",
     help="Path to dinov3 weights (used only if --model dinov3).",
 )
 
