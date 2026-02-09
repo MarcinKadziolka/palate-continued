@@ -46,16 +46,13 @@ class DINOv3Encoder(Encoder):
         self.model.eval()
 
     def transform(self, img):
-        imagenet_mean = np.array([0.485, 0.456, 0.406])
-        imagenet_std = np.array([0.229, 0.224, 0.225])
-
-        cifar_mean = [0.4914, 0.4822, 0.4465]
-        cifar_std = [0.2023, 0.1994, 0.2010]
+        mean = [0.4914, 0.4822, 0.4465]
+        std = [0.2023, 0.1994, 0.2010]
         img = TF.Compose(
             [
                 TF.Resize((224, 224), TF.InterpolationMode.BICUBIC),
                 TF.ToTensor(),
-                TF.Normalize(cifar_mean, cifar_std),
+                TF.Normalize(mean, std),
             ]
         )(img)
         return img
