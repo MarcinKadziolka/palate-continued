@@ -324,14 +324,16 @@ def compute_representations(
     if args.load:
         loaded_reps = load_reps_from_path(args.repr_dir, path, model, args.nsample)
         if loaded_reps is not None:
+            logger.info(f"Finished loading representations from {path}.")
             return loaded_reps
 
-    logger.warning("Load path doesn't exist.")
+    logger.warning(f"Load path {path} doesn't exist.")
     dataloader: CustomDataLoader = get_dataloader_from_path(
         path, model.transform, num_workers, args
     )
 
     representations = get_representations(model, dataloader, device, normalized=False)
+    logger.info(f"Finished computing representations from {path}.")
 
     if args.save:
         save_representations(
@@ -503,24 +505,23 @@ def main():
     else:
         exp_dir = create_unique_exp_dir()
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
+
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
-    if args.load_npz:
-        logger.info("Loading representations from NPZ files")
 
+    if args.load_npz:
+        logger.info("Loading representations directly from NPZ files.")
         train_representations = load_reps_from_npz(train_path)
         test_representations = load_reps_from_npz(test_path)
     else:
-
+        logger.info("Trying to compute representations from the provided paths or find if there are"
+                    "already a NPZ files under the given path in --repr_dir")
         train_representations = compute_representations(
             train_path, model, num_workers, device, args
         )
-        logger.info("Finished loading/computing train representations")
-
         test_representations = compute_representations(
             test_path, model, num_workers, device, args
         )
-        logger.info("Finished loading/computing test representations")
 
     logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
