@@ -1,4 +1,4 @@
-name: palate_continued
+name: palate
 channels:
   - defaults
   - https://repo.anaconda.com/pkgs/main
