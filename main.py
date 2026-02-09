@@ -91,7 +91,7 @@ parser.add_argument(
     "--tau",
     type=float,
     default=-300.0,
-    help="Explicit global KDE log-density threshold. Overrides --kde_percentile."
+    help="Explicit global KDE log-density threshold. Overrides --kde_percentile.",
 )
 
 parser.add_argument(
@@ -118,7 +118,7 @@ parser.add_argument(
 parser.add_argument(
     "--load_npz",
     action="store_true",
-    help="Run in image-free mode. Paths must be .npz files containing representations."
+    help="Run in image-free mode. Paths must be .npz files containing representations.",
 )
 
 parser.add_argument(
@@ -133,7 +133,7 @@ parser.add_argument(
     type=float,
     nargs="+",
     default=5.0,
-    help="List of percentiles for global KDE threshold grid search (in %)."
+    help="List of percentiles for global KDE threshold grid search (in %).",
 )
 
 
@@ -196,8 +196,10 @@ def get_dataloader_from_path(
     )
     return dataloader
 
+
 def now():
     return time.perf_counter()
+
 
 def create_unique_exp_dir() -> str:
     if os.getenv("OAR_JOB_ID"):
@@ -224,7 +226,9 @@ def write_to_txt(
 
     with open(out_path, "a") as f:
         f.write(f"Model: {model_arch}\n")
-        f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n")
+        f.write(
+            f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n"
+        )
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
@@ -248,9 +252,13 @@ def write_to_csv(
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
-            header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
+            header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(
+                scores.keys()
+            )
             writer.writerow(header)
-        row = [model_arch, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
+        row = [model_arch, train_name, test_name, gen_name, nsample, sigma] + list(
+            scores.values()
+        )
         writer.writerow(row)
 
 
@@ -259,15 +267,16 @@ def get_last_x_dirs(path: str, x=2):
     x = min(x, len(parts))
     return "_".join(parts[-x:])
 
+
 def save_score(
-        palate_components,
-        output_dir,
-        model,
-        train_path,
-        test_path,
-        gen_path,
-        nsample,
-        sigma,
+    palate_components,
+    output_dir,
+    model,
+    train_path,
+    test_path,
+    gen_path,
+    nsample,
+    sigma,
 ):
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
@@ -277,9 +286,12 @@ def save_score(
 
     scores = palate_components
 
-
-    write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
-    write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
+    write_to_txt(
+        scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma
+    )
+    write_to_csv(
+        scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma
+    )
 
     logger.info(
         f"Scores of:\ntrain: {train_path}\ntest: {test_path}\ngen: {gen_path}\nsaved to dir: {output_dir}"
@@ -389,6 +401,7 @@ def load_reps_from_path(
     else:
         return None
 
+
 def load_reps_from_npz(path: str) -> np.ndarray:
     if not path.endswith(".npz"):
         raise ValueError(f"Expected .npz file, got: {path}")
@@ -402,6 +415,7 @@ def load_reps_from_npz(path: str) -> np.ndarray:
 
     logger.info(f"Loaded representations from NPZ: {path}")
     return data["reps"]
+
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
@@ -445,23 +459,23 @@ def _kde_chunk(query, data, inv_sigma2):
     dist = q_norm + d_norm - 2.0 * cross
     return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
 
+
 def log_kde_jax(query, data, sigma, batch_size=16):
     """
     Fast KDE using JAX with batching.
     """
     query = jnp.asarray(query, dtype=jnp.float32)
     data = jnp.asarray(data, dtype=jnp.float32)
-    inv_sigma2 = 1.0 / (sigma ** 2)
+    inv_sigma2 = 1.0 / (sigma**2)
 
     outputs = []
 
     for i in range(0, len(query), batch_size):
-        q = query[i:i + batch_size]
+        q = query[i : i + batch_size]
         out = _kde_chunk(q, data, inv_sigma2)
         outputs.append(out)
 
     return jnp.concatenate(outputs, axis=0)
-
 
 
 def filter_gen_by_global_kde(gen, D, sigma, tau):
@@ -469,6 +483,7 @@ def filter_gen_by_global_kde(gen, D, sigma, tau):
     logp = np.asarray(logp)
     mask_keep = logp >= tau
     return mask_keep, ~mask_keep, logp
+
 
 def main():
     logger.info("Starting main function.")
@@ -504,8 +519,10 @@ def main():
         train_representations = load_reps_from_npz(train_path)
         test_representations = load_reps_from_npz(test_path)
     else:
-        logger.info("Trying to compute representations from the provided paths or find if there are"
-                    "already a NPZ files under the given path in --repr_dir")
+        logger.info(
+            "Trying to compute representations from the provided paths or find if there are"
+            "already a NPZ files under the given path in --repr_dir"
+        )
         train_representations = compute_representations(
             train_path, model, num_workers, device, args
         )

@@ -1,4 +1,5 @@
 import sys, os
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "models"))
 
 from models.dinov3 import DINOv3Encoder
@@ -13,12 +14,14 @@ encoder = DINOv3Encoder()
 encoder.setup(
     dino_size="b",
     repo_dir="dinov3",  # lokalny folder z DINOv3
-    ckpt=None#"model.safetensors"  # plik wag
+    ckpt=None,  # "model.safetensors"  # plik wag
 )
 
 # Wczytaj przykładowy obraz
 img = Image.new("RGB", (256, 256), color=(255, 0, 0))  # czerwony prostokąt
-x = encoder.transform(img).unsqueeze(0)  #  transform z klasy dinov3encoder, unsqueeze dodaje wymiar batcha na początek tensora
+x = encoder.transform(img).unsqueeze(
+    0
+)  #  transform z klasy dinov3encoder, unsqueeze dodaje wymiar batcha na początek tensora
 
 # Wylicz embedding
 with torch.no_grad():

@@ -4,6 +4,7 @@ from jax import lax
 
 _BLOCK_SIZE = 1024
 
+
 @jax.jit
 def kernel_mean_blockwise(x, y, sigma, n_real, m_real):
     n, d = x.shape
@@ -34,8 +35,7 @@ def kernel_mean_blockwise(x, y, sigma, n_real, m_real):
             valid_y = (j + jnp.arange(_BLOCK_SIZE)) < m_real
 
             k = jnp.exp(
-                -(x2b[:, None] + y2b[None, :] - 2 * xb @ yb.T)
-                / (2.0 * sigma**2)
+                -(x2b[:, None] + y2b[None, :] - 2 * xb @ yb.T) / (2.0 * sigma**2)
             )
 
             mask = valid_x[:, None] * valid_y[None, :]
@@ -50,10 +50,10 @@ def kernel_mean_blockwise(x, y, sigma, n_real, m_real):
     total, count = lax.fori_loop(0, nb, outer_loop, (0.0, 0.0))
     return total / count
 
+
 @jax.jit
 def dmmd_blockwise_jax(x, y, sigma, n_x, n_y):
     kxx = kernel_mean_blockwise(x, x, sigma, n_x, n_x)
     kyy = kernel_mean_blockwise(y, y, sigma, n_y, n_y)
     kxy = kernel_mean_blockwise(x, y, sigma, n_x, n_y)
     return kxx + kyy - 2.0 * kxy, kxx + kyy
-
