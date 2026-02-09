@@ -34,19 +34,8 @@ def compute_palate(
     gen_gt: np.ndarray,
     sigma: float,
 ):
-    """
-    Compute palate and m_palate metrics.
+    """Compute palate and m_palate metrics."""
 
-    Returns:
-        dict with:
-            - palate
-            - m_palate
-            - dmmd_train_gen
-            - dmmd_test_gen
-            - dmmd_test_train
-            - denominator_scale
-            - sigma
-    """
     logger.info("Computing DMMD values...")
     t0 = time.time()
     sigma3 = sigma / 3

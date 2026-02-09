@@ -19,7 +19,7 @@ TORCHVISION_DATA_PATH = "./data/"
 
 
 def get_files_at_path(path):
-    """Return list of all files at path of type IMAGE_EXTENSIONS"""
+    """Return list of all files at path of type IMAGE_EXTENSIONS."""
 
     files = sorted([file for ext in IMAGE_EXTENSIONS for file in path.glob(f"*.{ext}")])
 
@@ -27,8 +27,7 @@ def get_files_at_path(path):
 
 
 class ImagePathDataset(Dataset):
-    """
-    Create a custom dataset from a list of image files on disk
+    """Create a custom dataset from a list of image files on disk.
 
     Files must have image extensions specified in IMAGE_EXTENSIONS
     """
@@ -49,9 +48,7 @@ class ImagePathDataset(Dataset):
 
 
 class CustomDataLoader:
-    """
-    Create Datasets and Dataloaders from ImagePathDataset and from torchvision.datasets.
-    """
+    """Create Datasets and Dataloaders from ImagePathDataset and from torchvision.datasets."""
 
     def __init__(
         self,
@@ -106,8 +103,7 @@ class CustomDataLoader:
             raise Exception(f"Path {self.path} does not exist.")
 
     def get_local_dataset(self):
-        """
-        Get dataset from disk
+        """Get dataset from disk.
 
         Currently accepted formats:
 
@@ -152,7 +148,7 @@ class CustomDataLoader:
             )
 
     def subsample_dataset(self):
-        """subsample to desired size"""
+        """Subsample to desired size."""
 
         np.random.seed(self.seed)  # for consistent subsampling of datasets across runs
 
@@ -176,9 +172,7 @@ class CustomDataLoader:
         )
 
     def get_dataloader(self):
-        """
-        Create dataloader from dataset
-        """
+        """Create dataloader from dataset."""
         self.nimages = len(self.data_set)
         if self.batch_size > self.nimages:
             print(
@@ -208,7 +202,7 @@ def get_dataloader(
     random_sample: bool = True,
     sample_w_replacement: bool = False,
 ) -> CustomDataLoader:
-    """Deal with format of input path, and get relevant DataLoader"""
+    """Deal with format of input path, and get relevant DataLoader."""
     data_loader = CustomDataLoader(
         path,
         nsample=nsample,

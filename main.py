@@ -312,8 +312,7 @@ def get_model(args: Namespace, device: torch.device, ckpt: str) -> DinoEncoder:
 def compute_representations(
     path: str, model: DinoEncoder, num_workers: int, device, args: Namespace
 ) -> np.ndarray:
-    """
-    Compute or load representations for the given path.
+    """Compute or load representations for the given path.
 
     Args:
         path (str): Path to the data.
@@ -356,7 +355,7 @@ def save_representations(
     dataloader: CustomDataLoader,
     nsample: int,
 ):
-    """Save representations and other info to disk at file_path"""
+    """Save representations and other info to disk at file_path."""
     # Create a unique file path for saving
     out_path = get_path(output_dir, path, model, nsample)
 
@@ -376,8 +375,7 @@ def save_representations(
 def load_reps_from_path(
     saved_dir: str, path: str, model: DinoEncoder, nsample: int
 ) -> Optional[np.ndarray]:
-    """
-    Load representations from a saved .npz file if it exists.
+    """Load representations from a saved .npz file if it exists.
 
     Args:
         saved_dir (str): Directory where the representations are saved.
@@ -417,7 +415,7 @@ def load_reps_from_npz(path: str) -> np.ndarray:
 
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
-    """Generate a unique file path for saving representations"""
+    """Generate a unique file path for saving representations."""
 
     dataset_name = get_last_x_dirs(path)
     model_arch = model.arch_str if model is not None else "npz"
@@ -426,8 +424,7 @@ def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> st
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
-    """
-    Writes all arguments from the `args` object to a file, one argument per line.
+    """Writes all arguments from the `args` object to a file, one argument per line.
 
     Args:
         args: The argparse.Namespace object containing the arguments.
@@ -460,9 +457,7 @@ def _kde_chunk(query, data, inv_sigma2):
 
 
 def log_kde_jax(query, data, sigma, batch_size=16):
-    """
-    Fast KDE using JAX with batching.
-    """
+    """Fast KDE using JAX with batching."""
     query = jnp.asarray(query, dtype=jnp.float32)
     data = jnp.asarray(data, dtype=jnp.float32)
     inv_sigma2 = 1.0 / (sigma**2)
