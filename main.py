@@ -521,8 +521,8 @@ def main():
             test_path, model, num_workers, device, args
         )
         logger.info("Finished loading/computing test representations")
-        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
 
+    logger.info(f"Enumerating paths to generated samples: {gen_paths}")
     for gen_path in gen_paths:
 
         if args.load_npz:
