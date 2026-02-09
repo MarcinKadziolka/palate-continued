@@ -1,10 +1,10 @@
-import time
 import logging
-import numpy as np
-from dmmd import dmmd_blockwise_jax
-import jax
+import time
+
 import jax.numpy as jnp
-from jax import lax
+import numpy as np
+
+from dmmd import dmmd_blockwise_jax
 
 logger = logging.getLogger(__name__)
 

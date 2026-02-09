@@ -1,12 +1,14 @@
 # This code has been adapted from: https://github.com/layer6ai-labs/dgm-eval/blob/master/dgm_eval/representations.py
 
+import logging
+
 import numpy as np
-from tqdm import tqdm
 import torch
 from torch.nn.functional import adaptive_avg_pool2d
-from models.load_encoder import DinoEncoder
+from tqdm import tqdm
+
 from dataloader import CustomDataLoader
-import logging
+from models.load_encoder import DinoEncoder
 
 logger = logging.getLogger(__name__)
 

@@ -21,18 +21,16 @@
 # This code has been adapted from the sources above
 
 
-import torchvision.transforms as TF
-import numpy as np
-import torch
-
 import sys
 
+import numpy as np
+import torch
+import torchvision.transforms as TF
+from PIL import Image
 from torch import Tensor
+from torchvision.transforms.functional import to_tensor
 
 from .encoder import Encoder
-
-from PIL import Image
-from torchvision.transforms.functional import to_tensor
 
 
 def pil_resize(x, output_size):

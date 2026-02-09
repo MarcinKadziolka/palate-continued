@@ -1,17 +1,15 @@
 # This code has been adapted from Meta’s DINOv3 (https://github.com/facebookresearch/dinov3)
 import logging
 import os
-import torch
-import torch.nn as nn
-import torchvision.transforms as TF
-import numpy as np
-from safetensors.torch import load_file
-from PIL import Image
-from .encoder import Encoder
 import pathlib
 from typing import Optional
-import logging
 
+import numpy as np
+import torch
+import torchvision.transforms as TF
+from safetensors.torch import load_file
+
+from .encoder import Encoder
 
 logger = logging.getLogger(__name__)
 

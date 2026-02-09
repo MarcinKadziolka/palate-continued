@@ -1,11 +1,12 @@
 import inspect
+import logging
+from typing import TypeAlias
 from typing import Union
+
 import torch
 
 from .dinov2 import DINOv2Encoder
 from .dinov3 import DINOv3Encoder
-import logging
-from typing import TypeAlias
 
 logger = logging.getLogger(__name__)
 
