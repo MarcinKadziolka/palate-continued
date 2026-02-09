@@ -27,7 +27,9 @@ def load_encoder(model_name: str, device: torch.device, **kwargs) -> DinoEncoder
     arguments = arguments[1:]  # Omit `self` arg
 
     # Initialize model using the `arguments` that have been passed in the `kwargs` dict
-    encoder: DinoEncoder = model_cls(**{arg: kwargs[arg] for arg in arguments if arg in kwargs})
+    encoder: DinoEncoder = model_cls(
+        **{arg: kwargs[arg] for arg in arguments if arg in kwargs}
+    )
     encoder.name = model_name
 
     logger.info(f"Loaded {model_cls.__name__}")

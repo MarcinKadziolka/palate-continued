@@ -15,6 +15,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class DINOv3Encoder(Encoder):
     def setup(self, dino_size="l", repo_dir="./dinov3", ckpt: Optional[str] = None):
         """
@@ -40,10 +41,11 @@ class DINOv3Encoder(Encoder):
 
             self.model.load_state_dict(state_dict, strict=False)
         else:
-            logger.warning(f"Initialized {self.arch_str} model with random weights. Checkpoint is either None or doesn't exist: {self.dino_ckpt=}")
+            logger.warning(
+                f"Initialized {self.arch_str} model with random weights. Checkpoint is either None or doesn't exist: {self.dino_ckpt=}"
+            )
 
         self.model.eval()
-
 
     def transform(self, img):
         """Transformacja obrazu do formatu wejściowego DINOv3"""
