@@ -293,13 +293,13 @@ def save_score(
 
 
 def get_model(args: Namespace, device: torch.device, ckpt: str) -> DinoEncoder:
+    # We pass the full bucket of arguments.
+    # load_encoder will pick only what it needs for the specific model.
     return load_encoder(
-        args.model,
-        device,
+        model_name=args.model,
+        device=device,
         ckpt=ckpt,
-        arch=None,
         clean_resize=args.clean_resize,
-        sinception=True if args.model == "sinception" else False,
         depth=args.depth,
     )
 
