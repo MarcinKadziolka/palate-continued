@@ -9,7 +9,7 @@ from .encoder import Encoder
 
 
 class CLIPEncoder(Encoder):
-    def setup(self, arch: str = "ViT-B/32", clean_resize: bool = False):
+    def setup(self, arch: str = "ViT-L/14", clean_resize: bool = False):
         # --- Automatic Installation Check ---
         try:
             import clip
