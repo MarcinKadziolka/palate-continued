@@ -46,8 +46,8 @@ class DINOv3Encoder(Encoder):
 
 
     def transform(self, img):
-        """Transformacja obrazu do formatu wejściowego DINOv3"""
-        # normalizacja taka jak dla ImageNet
+        """Transform an image into the DINOv3 input format."""
+        # Normalization currently used for this pipeline.
         imagenet_mean = np.array([0.485, 0.456, 0.406])
         imagenet_std = np.array([0.229, 0.224, 0.225])
 
