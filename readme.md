@@ -1,161 +1,97 @@
-# main.py — palate runner
+PALATE: Peculiar Application of the Law of Total Expectation to
+Enhance the Evaluation of Deep Generative Models
 
+Abstract
+Deep generative models (DGMs) have caused a paradigm shift in
+the field of machine learning, yielding noteworthy advancements
+in domains such as image synthesis, natural language processing,
+and other related areas. However, a comprehensive evaluation of
+these models that effectively captures the interplay among fidelity,
+diversity, and novelty in generated samples remains a persistent
+challenge. A recently proposed approach, the Feature Likelihood
+Divergence (FLD), offers a theoretically grounded and practical
+tool in this regard but faces notable computational limitations. In
+this paper, we propose PALATE, a novel framework designed to
+enhance the evaluation of DGMs by addressing the efficiency con-
+straints of FLD. Our approach is based on a peculiar application of
+the law of total expectation to random variables representing acces-
+sible data. When integrated with the MMD baseline metric and the
+recently introduced DINOv3 feature extractor, PALATE provides
+a comprehensive evaluation framework that matches or exceeds
+state-of-the-art methods while offering superior computational ef-
+ficiency and scalability to large-scale datasets. Through a series
+of experiments, we demonstrate that the PALATE enhancement
+constitutes a practical and computationally efficient framework for
+holistic DGM assessment, particularly in detecting sample memo-
+rization and evaluating generalization capabilities.
 
-## Command-line Arguments
+## Instructions to Run
 
-### Positional arguments
+### 1. Setting things up
 
-| Argument | Type                | Description                                                                                                  |
-| -------- | ------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `path`   | `str` (one or more) | Paths to image datasets **in order**: `train test gen_1 gen_2 ... gen_n`. At least **3 paths** are required. |
+#### a. Install conda
 
+Install one of Anaconda Distributions (for example [conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/index.html) or [miniconda](https://www.anaconda.com/docs/getting-started/miniconda/install#quickstart-install-instructions)).
 
-### Optional arguments
-
-#### Model & representations
-
-| Argument      | Default                                     | Description                                                                             |
-| ------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `--model`     | `dinov2`                                    | Encoder model used to generate representations. Choices are taken from `MODELS.keys()`. |
-| `--dino_ckpt` | path to dinov3 pth checkpoint on the server | Path to DINOv3 weights (used only if `--model dinov3`).                                 |
-| `--sigma`     | `0.01`                                      | Kernel bandwidth used in palate / dmmd computation.                                     |
-
-
-#### Sampling & performance
-
-| Argument              | Default            | Description                                                            |
-| --------------------- | ------------------ | ---------------------------------------------------------------------- |
-| `--nsample`           | `10000`            | Maximum number of images used per dataset.                             |
-| `--batch_size`, `-bs` | `50`               | Batch size for representation extraction.                              |
-| `--num-workers`       | `min(8, num_cpus)` | Number of workers for data loading.                                    |
-| `--device`            | auto               | Device to use (`cuda`, `cuda:0`, `cpu`). Auto-selects if not provided. |
-| `--seed`              | `13579`            | Random seed for sampling.                                              |
-
-
-#### Representation caching
-
-| Argument     | Default                   | Description                                                  |
-| ------------ | ------------------------- | ------------------------------------------------------------ |
-| `--repr_dir` | `./saved_representations` | Directory for cached representations.                        |
-| `--save`     | `False`                   | Save computed representations to `repr_dir`.                 |
-| `--load`     | `False`                   | Load representations from `repr_dir` instead of recomputing. |
-
-
-#### Experiment output
-
-| Argument       | Default          | Description                                                                  |
-| -------------- | ---------------- | ---------------------------------------------------------------------------- |
-| `--output_dir` | `./output`       | Root directory for all experiment outputs.                                   |
-| `--exp_dir`    | random 8-char ID | Name of the experiment directory. If not provided, a unique ID is generated. |
-
-
-## Example Usage
-
-### Example (single generated dataset)
+#### b. Create conda environment:
 
 ```bash
-python main.py \
-  "/shared/sets/datasets/CIFAR10-dgm_eval/CIFAR10/train" \
-  "/shared/sets/datasets/CIFAR10-dgm_eval/CIFAR10/test" \
-  "/shared/sets/datasets/CIFAR10-dgm_eval/CIFAR10-MHGAN" \
-  --save \
-  --load
+conda env create -f environment.yaml
 ```
 
+#### c. Activate environment:
 
-Output Structure
-
-### 1. Experiment directory layout
-
-```
-output/
-└── <--exp_dir>/
-    ├── metrics_summary.csv
-    ├── metrics_summary.txt
-    └── arguments.txt
+```bash
+conda activate palate
 ```
 
-If `--exp_dir` is **not** provided, it is an auto-generated 8-character ID (UUID or cluster job ID).
+### 2. Example call
 
-
-### 2. `metrics_summary.csv`
-
-One row **per generated dataset**.
-
-Each run will **append** to the existing file, meaning that for one sbatch
-the folder can be _static_.
-
-Example:
-
-```
-Train,Test,Gen,Nsample,m_palate,palate,...
-CIFAR10_train,CIFAR10_test,CIFAR10_CIFAR10-ACGAN-Mod,10000,0.74487555,0.4919243,...
-CIFAR10_train,CIFAR10_test,CIFAR10_CIFAR10-MHGAN,10000,0.7304801,0.49030876,...
+```bash
+python3 main.py ./path/to/train ./path/to/test ./path/to/gen_1 ./path/to/gen_2 --batch_size 256 --nsample 1000 --save --load
 ```
 
-- `Train`, `Test`, `Gen` are derived from the **last two path components**
-- Metric columns correspond to fields of `PalateComponents` in the exact order.
+- The **first path** should point to the **training data**.
+- The **second path** should point to the **test data**.
+- Subsequent paths should point to folders containing **generated samples** (one folder per model).
 
+Each run generates a unique folder in the specified output directory. The folder contains metrics summary in `.txt` and `.csv` format.
 
-### 3. `metrics_summary.txt`
+### Detailed Information
 
-Human-readable log of results, appended per generated dataset:
+```text
+usage: main.py [-h] [--model {dinov2,dinov3}] [--nsample NSAMPLE] [--sigma SIGMA] [-bs BATCH_SIZE] [--num-workers NUM_WORKERS] [--device DEVICE] [--output_dir OUTPUT_DIR] [--tau TAU]
+               [--exp_dir EXP_DIR] [--dino_ckpt DINO_CKPT] [--seed SEED] [--clean_resize] [--load_npz] [--depth DEPTH] [--kde_percentile KDE_PERCENTILE [KDE_PERCENTILE ...]] [--repr_dir REPR_DIR]
+               [--save] [--load]
+               path [path ...]
 
-```
-Model: dinov2_vitl14
-Train: /home/mubuntu/datasets/CIFAR10/CIFAR10/train
-Test: /home/mubuntu/datasets/CIFAR10/CIFAR10/test
-Gen: /home/mubuntu/datasets/CIFAR10/CIFAR10-ACGAN-Mod
-nsample: 10000
-m_palate: 0.7448755502700806
-palate: 0.4919242858886719
-train_gen: 0.0002973441150970757
-test_gen: 0.00028789174393750727
-test_train: 0.000209193371119909
-denominator_scale: 0.0002885187277570367
-sigma: 10.0
-m_palate_formula: palate/2 + dmmd_test/(2*denominator_scale)
-palate_formula: dmmd_test/(dmmd_test + dmmd_train)
-m_palate_formula_hash: 3266612f4115
-palate_formula_hash: c656cc8e53a0
+positional arguments:
+  path                  Paths to image datasets in order: train test gen_1 gen_2 ... gen_n. At least 3 paths are required.
 
-==================================================
-```
-
-
-### 4. `arguments.txt`
-
-Exact arguments used for reproducibility:
-
-```
-model: dinov2
-nsample: 10000
-sigma: 0.01
-batch_size: 50
-num_workers: None
-device: None
-path: ['/home/mubuntu/datasets/CIFAR10/CIFAR10/train', '/home/mubuntu/datasets/CIFAR10/CIFAR10/test', '/home/mubuntu/datasets/CIFAR10/CIFAR10-ACGAN-Mod']
-output_dir: fresh
-exp_dir: test
-dino_ckpt: /shared/results/gmdziarm/dinov3_vitl16_pretrain_lvd1689m-8aa4cbdd.pth
-seed: 13579
-clean_resize: False
-depth: 0
-repr_dir: new
-save: True
-load: True
-
-==================================================
-```
-
-
-### 5. Saved representations (optional)
-
-If `--save` is enabled:
-
-```
-<--repr_dir>/
-└── dinov2_vitl14_CIFAR10_train_10000.npz
-└── dinov2_vitl14_CIFAR10_test_10000.npz
-└── dinov2_vitl14_CIFAR10_CIFAR10-ACGAN-Mod_10000.npz. 
+options:
+  -h, --help            show this help message and exit
+  --model {dinov2,dinov3}
+                        Encoder model used to generate representations. (default: dinov2)
+  --nsample NSAMPLE     Maximum number of images used per dataset. (default: 10000)
+  --sigma SIGMA         Sigma to use in blockwise_kernel_mean in dmmd.py (default: 10.5)
+  -bs BATCH_SIZE, --batch_size BATCH_SIZE
+                        Batch size to use. If needed, equals to min(batch_size, nsample). (default: 50)
+  --num-workers NUM_WORKERS
+                        Number of processes to use for data loading. Defaults to `min(8, num_cpus)` (default: None)
+  --device DEVICE       Device to use. Like cuda, cuda:0 or cpu (default: None)
+  --output_dir OUTPUT_DIR
+                        Root directory for all experiment outputs. (default: ./output)
+  --tau TAU             Explicit global KDE log-density threshold. Overrides --kde_percentile. (default: -300.0)
+  --exp_dir EXP_DIR     Name of the experiment directory. If not provided, a unique ID is generated. Parent is --output_dir (default: None)
+  --dino_ckpt DINO_CKPT
+                        Path to dinov3 weights (used only if --model dinov3). (default: None)
+  --seed SEED           Random seed (default: 13579)
+  --clean_resize        Use clean resizing (from pillow) (default: False)
+  --load_npz            Run in image-free mode. Paths must be .npz files containing representations. (default: False)
+  --depth DEPTH         Negative depth for internal layers, positive 1 for after projection head. (default: 0)
+  --kde_percentile KDE_PERCENTILE [KDE_PERCENTILE ...]
+                        List of percentiles for global KDE threshold grid search (in %). (default: 5.0)
+  --repr_dir REPR_DIR   Directory for cached representations. (default: ./saved_representations)
+  --save                Save computed representations to repr_dir. (default: False)
+  --load                Load representations from repr_dir instead of recomputing. (default: False)
 ```
