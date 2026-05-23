@@ -1,29 +1,28 @@
-PALATE: Peculiar Application of the Law of Total Expectation to
-Enhance the Evaluation of Deep Generative Models
+**PALATE: Efficient Holistic Evaluation of Deep Generative Models
+via Expectation-Based Feature Decomposition**
 
-Abstract
-Deep generative models (DGMs) have caused a paradigm shift in
-the field of machine learning, yielding noteworthy advancements
-in domains such as image synthesis, natural language processing,
-and other related areas. However, a comprehensive evaluation of
-these models that effectively captures the interplay among fidelity,
-diversity, and novelty in generated samples remains a persistent
-challenge. A recently proposed approach, the Feature Likelihood
-Divergence (FLD), offers a theoretically grounded and practical
-tool in this regard but faces notable computational limitations. In
-this paper, we propose PALATE, a novel framework designed to
-enhance the evaluation of DGMs by addressing the efficiency con-
-straints of FLD. Our approach is based on a peculiar application of
-the law of total expectation to random variables representing acces-
-sible data. When integrated with the MMD baseline metric and the
-recently introduced DINOv3 feature extractor, PALATE provides
-a comprehensive evaluation framework that matches or exceeds
-state-of-the-art methods while offering superior computational ef-
-ficiency and scalability to large-scale datasets. Through a series
-of experiments, we demonstrate that the PALATE enhancement
-constitutes a practical and computationally efficient framework for
-holistic DGM assessment, particularly in detecting sample memo-
-rization and evaluating generalization capabilities.
+**Abstract**
+Deep generative models (DGMs) have achieved strong performance
+across tasks such as image synthesis and language generation, yet
+their evaluation remains challenging due to the need to jointly
+assess fidelity, diversity, and novelty within a single coherent score.
+Existing approaches, including Feature Likelihood Divergence (FLD),
+provide principled evaluation frameworks but are often computa-
+tionally expensive and difficult to scale to large datasets. In this
+paper, we introduce PALATE, an efficient framework for holistic
+evaluation of DGMs. PALATE is motivated by an expectation-based
+decomposition of feature-space statistics, enabling a reformula-
+tion of evaluation objectives through a structured application of
+the law of total expectation over accessible data representations.
+When combined with an MMD-based baseline and DINOv3 feature
+embeddings, PALATE yields a unified scalar metric that captures
+fidelity, diversity, and novelty in generated samples. Empirically,
+we find that PALATE achieves performance comparable to or better
+than recent state-of-the-art evaluation methods while significantly
+reducing computational cost. In addition, it provides a practical tool
+for detecting memorization behavior and assessing generalization
+in large-scale generative models. Overall, PALATE offers a scalable
+and interpretable alternative for holistic DGM evaluation.
 
 ## Instructions to Run
 
