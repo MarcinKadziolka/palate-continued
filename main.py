@@ -1,5 +1,6 @@
 # This script contains modified parts of code from repository: https://github.com/layer6ai-labs/dgm-eval
 
+import time
 import csv
 import dataclasses
 import logging
@@ -8,17 +9,24 @@ import pathlib
 import uuid
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, Namespace
 from typing import Literal, Optional, Callable
+from scipy.special import logsumexp
 
-from jaxlib.xla_client import Array
 import numpy as np
 import torch
-
+from palate_local_knn import compute_local_palate_knn
+from palate_local_knn import compute_global_palate_fast
+from palate_local_knn import compute_global_palate_fast_normalized
+from palate_local_knn import compute_global_palate_fast_anisotropic
+import jax
+import jax.numpy as jnp
+from jax import jit
 from dataloader import CustomDataLoader
 from dataloader import get_dataloader
 from models.load_encoder import DinoEncoder
 from models.load_encoder import MODELS, load_encoder
-from palate import compute_palate, PalateComponents, flatten_dataclass
+from palate import compute_palate
 from representations import get_representations
+from dmmd import dmmd_blockwise_jax
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +56,7 @@ parser.add_argument(
 parser.add_argument(
     "--sigma",
     type=float,
-    default=0.01,
+    default=10.5,
     help="Sigma to use in blockwise_kernel_mean in dmmd.py",
 )
 
@@ -86,6 +94,13 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--tau",
+    type=float,
+    default=-300.0,
+    help="Explicit global KDE log-density threshold. Overrides --kde_percentile."
+)
+
+parser.add_argument(
     "--exp_dir",
     type=str,
     default=None,
@@ -107,11 +122,26 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "--load_npz",
+    action="store_true",
+    help="Run in image-free mode. Paths must be .npz files containing representations."
+)
+
+parser.add_argument(
     "--depth",
     type=int,
     default=0,
     help="Negative depth for internal layers, positive 1 for after projection head.",
 )
+
+parser.add_argument(
+    "--kde_percentile",
+    type=float,
+    nargs="+",
+    default=5.0,
+    help="List of percentiles for global KDE threshold grid search (in %)."
+)
+
 
 parser.add_argument(
     "--repr_dir",
@@ -172,6 +202,8 @@ def get_dataloader_from_path(
     )
     return dataloader
 
+def now():
+    return time.perf_counter()
 
 def create_unique_exp_dir() -> str:
     if os.getenv("OAR_JOB_ID"):
@@ -183,20 +215,21 @@ def create_unique_exp_dir() -> str:
 
 
 def write_to_txt(
-    scores: dict[str, Array | str],
-    output_dir: str,
-    model: DinoEncoder,
-    train_path: str,
-    test_path: str,
-    gen_path: str,
-    nsample: int,
+    scores,
+    output_dir,
+    model,
+    train_path,
+    test_path,
+    gen_path,
+    nsample,
     sigma,
 ):
+    model_arch = model.arch_str if model is not None else "npz"
     out_file = "metrics_summary.txt"
     out_path = os.path.join(output_dir, out_file)
 
     with open(out_path, "a") as f:
-        f.write(f"Model: {model.arch_str}\n")
+        f.write(f"Model: {model_arch}\n")
         f.write(f"Train: {train_path}\nTest: {test_path}\nGen: {gen_path}\nnsample: {nsample}\nsigma: {sigma}\n")
         for key, value in scores.items():
             f.write(f"{key}: {value}\n")
@@ -204,7 +237,7 @@ def write_to_txt(
 
 
 def write_to_csv(
-    scores: dict[str, Array | str],
+    scores,
     output_dir,
     model,
     train_name,
@@ -216,12 +249,14 @@ def write_to_csv(
     csv_file = os.path.join(output_dir, "metrics_summary.csv")
     file_exists = os.path.isfile(csv_file)
 
+    model_arch = model.arch_str if model is not None else "npz"
+
     with open(csv_file, mode="a", newline="") as f:
         writer = csv.writer(f)
         if not file_exists:
             header = ["model_arch", "train", "test", "ten", "nsample", "sigma"] + list(scores.keys())
             writer.writerow(header)
-        row = [model.arch_str, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
+        row = [model_arch, train_name, test_name, gen_name, nsample, sigma] + list(scores.values())
         writer.writerow(row)
 
 
@@ -230,25 +265,24 @@ def get_last_x_dirs(path: str, x=2):
     x = min(x, len(parts))
     return "_".join(parts[-x:])
 
-
 def save_score(
-    palate_components: PalateComponents,
-    output_dir: str,
-    model,
-    train_path,
-    test_path,
-    gen_path,
-    nsample,
-    sigma,
+        palate_components,
+        output_dir,
+        model,
+        train_path,
+        test_path,
+        gen_path,
+        nsample,
+        sigma,
 ):
-
     train_name = get_last_x_dirs(train_path)
     test_name = get_last_x_dirs(test_path)
     gen_name = get_last_x_dirs(gen_path)
 
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    scores = flatten_dataclass(palate_components)
+    scores = palate_components
+
 
     write_to_txt(scores, output_dir, model, train_path, test_path, gen_path, nsample, sigma)
     write_to_csv(scores, output_dir, model, train_name, test_name, gen_name, nsample, sigma)
@@ -359,13 +393,27 @@ def load_reps_from_path(
     else:
         return None
 
+def load_reps_from_npz(path: str) -> np.ndarray:
+    if not path.endswith(".npz"):
+        raise ValueError(f"Expected .npz file, got: {path}")
+
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Representation file not found: {path}")
+
+    data = np.load(path)
+    if "reps" not in data:
+        raise KeyError(f"'reps' key not found in {path}")
+
+    logger.info(f"Loaded representations from NPZ: {path}")
+    return data["reps"]
 
 def get_path(output_dir: str, path: str, model: DinoEncoder, nsample: int) -> str:
     """Generate a unique file path for saving representations"""
 
     dataset_name = get_last_x_dirs(path)
+    model_arch = model.arch_str if model is not None else "npz"
 
-    return os.path.join(output_dir, f"{model.arch_str}_{dataset_name}_{nsample}.npz")
+    return os.path.join(output_dir, f"{model_arch}_{dataset_name}_{nsample}.npz")
 
 
 def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments.txt"):
@@ -387,6 +435,48 @@ def write_arguments(args: Namespace, output_dir: str, filename: str = "arguments
             f.write(f"{arg}: {value}\n")
         f.write("\n" + "=" * 50 + "\n\n")
 
+from scipy.special import logsumexp
+
+@jit
+def _kde_chunk(query, data, inv_sigma2):
+    """
+    query: [B, D]
+    data:  [N, D]
+    """
+    q_norm = jnp.sum(query**2 * inv_sigma2, axis=1, keepdims=True)
+    d_norm = jnp.sum(data**2 * inv_sigma2, axis=1)
+    cross = (query * inv_sigma2) @ data.T
+
+    dist = q_norm + d_norm - 2.0 * cross
+    return jax.scipy.special.logsumexp(-0.5 * dist, axis=1) - jnp.log(data.shape[0])
+
+def log_kde_jax(query, data, sigma, batch_size=16):
+    """
+    Fast KDE using JAX with batching.
+    """
+    query = jnp.asarray(query, dtype=jnp.float32)
+    data = jnp.asarray(data, dtype=jnp.float32)
+    inv_sigma2 = 1.0 / (sigma ** 2)
+
+    outputs = []
+
+    for i in range(0, len(query), batch_size):
+        q = query[i:i + batch_size]
+        out = _kde_chunk(q, data, inv_sigma2)
+        outputs.append(out)
+
+    return jnp.concatenate(outputs, axis=0)
+
+import jax
+from jax import lax
+import jax.numpy as jnp
+from jax.scipy.special import logsumexp
+
+def filter_gen_by_global_kde(gen, D, sigma, tau):
+    logp = log_kde_jax(gen, D, sigma)
+    logp = np.asarray(logp)
+    mask_keep = logp >= tau
+    return mask_keep, ~mask_keep, logp
 
 def main():
     logger.info("Starting main function.")
@@ -415,29 +505,71 @@ def main():
     output_experiment_dir = os.path.join(args.output_dir, exp_dir)
     logger.info(f"Experiment directory: {output_experiment_dir}")
     write_arguments(args, output_experiment_dir)
+    if args.load_npz:
+        logger.info("Loading representations from NPZ files")
 
-    train_representations = compute_representations(
-        train_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing train representations")
+        train_representations = load_reps_from_npz(train_path)
+        test_representations = load_reps_from_npz(test_path)
+    else:
 
-    test_representations = compute_representations(
-        test_path, model, num_workers, device, args
-    )
-    logger.info("Finished loading/computing test representations")
-    logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+        train_representations = compute_representations(
+            train_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing train representations")
+
+        test_representations = compute_representations(
+            test_path, model, num_workers, device, args
+        )
+        logger.info("Finished loading/computing test representations")
+        logger.info(f"Enumerating paths to generated samples: {gen_paths}")
+
     for gen_path in gen_paths:
 
-        gen_representations = compute_representations(
-            gen_path, model, num_workers, device, args
+        if args.load_npz:
+            gen_representations = load_reps_from_npz(gen_path)
+        else:
+            gen_representations = compute_representations(
+                gen_path, model, num_workers, device, args
+            )
+
+        # ==============================
+        # KDE FILTERING (timed)
+        # ==============================
+        t0 = time.perf_counter()
+
+        D = np.vstack([train_representations, test_representations])
+        sigma_D = np.std(D, axis=0).astype(np.float32)
+        tau = float(args.tau)
+
+        mask_keep, mask_low, _ = filter_gen_by_global_kde(
+            gen_representations,
+            D,
+            sigma_D,
+            tau,
         )
 
-        palate_components: PalateComponents = compute_palate(
+        gen_gt = gen_representations[mask_keep]
+
+        kde_time = time.perf_counter() - t0
+
+        # ==============================
+        # PALATE (timed)
+        # ==============================
+        t1 = time.perf_counter()
+
+        palate_components = compute_palate(
             train_representations=train_representations,
             test_representations=test_representations,
             gen_representations=gen_representations,
+            gen_gt=gen_gt,
             sigma=args.sigma,
         )
+
+        palate_time = time.perf_counter() - t1
+        total_time = kde_time + palate_time
+        palate_components["time_kde_sec"] = kde_time
+        palate_components["time_palate_sec"] = palate_time
+        palate_components["time_total_sec"] = total_time
 
         save_score(
             palate_components,
@@ -447,7 +579,7 @@ def main():
             test_path,
             gen_path,
             args.nsample,
-            args.sigma
+            args.sigma,
         )
 
 
